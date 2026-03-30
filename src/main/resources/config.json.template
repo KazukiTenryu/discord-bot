@@ -1,4 +1,6 @@
 {
     "botToken": "<your_bot_token>",
-    "muteRole": "Muted"
+    "muteRole": "Muted",
+    "infoLogsChannelWebHookURL": "",
+    "errorLogsChannelWebHookURL": ""
 }

@@ -6,4 +6,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record Config(
         @JsonProperty("botToken") String botToken,
-        @JsonProperty("muteRole") String muteRole) {}
+        @JsonProperty("muteRole") String muteRole,
+        @JsonProperty("infoLogsChannelWebHookURL") String infoLogsChannelWebHookURL,
+        @JsonProperty("errorLogsChannelWebHookURL") String errorLogsChannelWebHookURL) {}
