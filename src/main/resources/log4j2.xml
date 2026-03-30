@@ -1,16 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Configuration status="WARN">
     <Appenders>
-        <Console name="Console" target="SYSTEM_OUT">
+        <Console name="Console" target="SYSTEM_ERR">
             <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
         </Console>
+
+        <DiscordLoggingAppender name="DiscordLoggingAppender"
+                                infoLogsChannelWebHookURL="${sys:infoLogsChannelWebHookURL}"
+                                errorLogsChannelWebHookURL="${sys:errorLogsChannelWebHookURL}">
+            <PatternLayout pattern="%m%n"/>
+        </DiscordLoggingAppender>
     </Appenders>
+
     <Loggers>
-        <Logger name="bot" level="debug" additivity="false">
+        <Logger name="bot" level="error" additivity="false">
             <AppenderRef ref="Console"/>
+            <AppenderRef ref="DiscordLoggingAppender"/>
         </Logger>
+
         <Root level="info">
             <AppenderRef ref="Console"/>
+            <AppenderRef ref="DiscordLoggingAppender"/>
         </Root>
     </Loggers>
 </Configuration>

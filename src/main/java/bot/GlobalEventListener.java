@@ -25,9 +25,14 @@ public class GlobalEventListener extends ListenerAdapter {
     @Override
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
         String name = event.getName();
-        Optional<SlashCommand> optionalSlashCommand = slashCommandRepository.getCommands().stream()
-                .filter(cmd -> cmd.getName().equals(name))
-                .findFirst();
-        optionalSlashCommand.ifPresent(slashCommand -> slashCommand.handle(event));
+
+        try {
+            Optional<SlashCommand> optionalSlashCommand = slashCommandRepository.getCommands().stream()
+                    .filter(cmd -> cmd.getName().equals(name))
+                    .findFirst();
+            optionalSlashCommand.ifPresent(slashCommand -> slashCommand.handle(event));
+        } catch (Exception e) {
+            LOGGER.error("Failed to handle slash command /{}", name, e);
+        }
     }
 }

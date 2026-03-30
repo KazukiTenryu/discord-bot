@@ -8,7 +8,7 @@ public abstract class SlashCommand {
     private final String name;
     private final SlashCommandData data;
 
-    protected SlashCommand(String name, String description) {
+    public SlashCommand(String name, String description) {
         this.name = name;
         this.data = Commands.slash(name, description);
     }

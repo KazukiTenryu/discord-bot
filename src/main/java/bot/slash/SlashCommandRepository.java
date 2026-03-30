@@ -4,6 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 import bot.config.Config;
+import bot.slash.moderation.KickCommand;
+import bot.slash.moderation.MuteCommand;
+import bot.slash.moderation.UnmuteCommand;
 import bot.slash.ping.PingCommand;
 
 public class SlashCommandRepository {
@@ -16,6 +19,9 @@ public class SlashCommandRepository {
 
     private void registerCommands(Config config) {
         commands.add(new PingCommand());
+        commands.add(new MuteCommand(config));
+        commands.add(new UnmuteCommand(config));
+        commands.add(new KickCommand());
     }
 
     public List<SlashCommand> getCommands() {

@@ -7,19 +7,18 @@ import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.requests.restaction.CommandListUpdateAction;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
 import bot.config.Config;
 import bot.config.ConfigLoader;
 import bot.slash.SlashCommandRepository;
 
 public class Main {
-    private static final Logger LOGGER = LogManager.getLogger(Main.class);
-
     void main() {
+        System.out.println("Starting bot...");
+
         try {
             Config config = ConfigLoader.loadConfig();
+            System.setProperty("infoLogsChannelWebHookURL", config.infoLogsChannelWebHookURL());
+            System.setProperty("errorLogsChannelWebHookURL", config.errorLogsChannelWebHookURL());
 
             SlashCommandRepository slashCommandRepository = new SlashCommandRepository(config);
 
@@ -33,8 +32,10 @@ public class Main {
 
             commands.queue();
 
+            System.out.println("Bot has started successfully");
+
         } catch (Exception e) {
-            LOGGER.error("Failed to start application", e);
+            System.err.println("Failed to start application: " + e.getMessage());
         }
     }
 }
