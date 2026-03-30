@@ -1,3 +1,4 @@
 {
-    "botToken": "<your_bot_token>"
+    "botToken": "<your_bot_token>",
+    "muteRole": "Muted"
 }
