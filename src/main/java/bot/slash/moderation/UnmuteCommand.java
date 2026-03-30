@@ -24,7 +24,7 @@ public class UnmuteCommand extends SlashCommand {
 
         this.muteRole = config.muteRole();
 
-        getData().addOptions(new OptionData(OptionType.USER, USER_OPTION, "the user to mute", true));
+        getData().addOptions(new OptionData(OptionType.USER, USER_OPTION, "the user to unmute", true));
     }
 
     @Override
