@@ -6,10 +6,7 @@ import java.util.List;
 import bot.config.Config;
 import bot.database.Database;
 import bot.slash.moderation.*;
-import bot.slash.pet.BonkCommand;
-import bot.slash.pet.HugCommand;
-import bot.slash.pet.PetCommand;
-import bot.slash.pet.WorshipCommand;
+import bot.slash.pet.*;
 import bot.slash.ping.PingCommand;
 import bot.slash.rate.RateCommand;
 
@@ -30,10 +27,12 @@ public class SlashCommandRepository {
         commands.add(new RulesCommand());
         commands.add(new NoteCommand(database));
         commands.add(new AuditCommand(database));
-        commands.add(new PetCommand(config));
-        commands.add(new BonkCommand(config));
-        commands.add(new HugCommand(config));
-        commands.add(new WorshipCommand(config));
+
+        HandleCommandAction handleCommandAction = new HandleCommandAction(config);
+        commands.add(new PetCommand(handleCommandAction));
+        commands.add(new BonkCommand(handleCommandAction));
+        commands.add(new HugCommand(handleCommandAction));
+        commands.add(new WorshipCommand(handleCommandAction));
     }
 
     public List<SlashCommand> getCommands() {
