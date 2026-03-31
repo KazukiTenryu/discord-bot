@@ -4,28 +4,28 @@ import java.util.ArrayList;
 import java.util.List;
 
 import bot.config.Config;
-import bot.slash.moderation.KickCommand;
-import bot.slash.moderation.MuteCommand;
-import bot.slash.moderation.RulesCommand;
-import bot.slash.moderation.UnmuteCommand;
+import bot.database.Database;
+import bot.slash.moderation.*;
 import bot.slash.ping.PingCommand;
 import bot.slash.rate.RateCommand;
 
 public class SlashCommandRepository {
     private final List<SlashCommand> commands;
 
-    public SlashCommandRepository(Config config) {
+    public SlashCommandRepository(Config config, Database database) {
         this.commands = new ArrayList<>();
-        registerCommands(config);
+        registerCommands(config, database);
     }
 
-    private void registerCommands(Config config) {
+    private void registerCommands(Config config, Database database) {
         commands.add(new PingCommand());
         commands.add(new MuteCommand(config));
         commands.add(new UnmuteCommand(config));
         commands.add(new KickCommand());
         commands.add(new RateCommand());
         commands.add(new RulesCommand());
+        commands.add(new NoteCommand(database));
+        commands.add(new AuditCommand(database));
     }
 
     public List<SlashCommand> getCommands() {
