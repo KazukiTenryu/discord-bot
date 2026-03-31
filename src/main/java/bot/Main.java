@@ -23,7 +23,7 @@ public class Main {
 
             Database database = new Database("jdbc:sqlite:" + config.dbFile());
 
-            SlashCommandRepository slashCommandRepository = new SlashCommandRepository(config);
+            SlashCommandRepository slashCommandRepository = new SlashCommandRepository(config, database);
 
             JDA jda = JDABuilder.createLight(config.botToken(), EnumSet.allOf(GatewayIntent.class))
                     .addEventListeners(new GlobalEventListener(config, database, slashCommandRepository))
