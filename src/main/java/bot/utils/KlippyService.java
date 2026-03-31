@@ -6,6 +6,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.Optional;
+import java.util.concurrent.ThreadLocalRandom;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -35,16 +36,23 @@ public class KlippyService {
             String body = response.body();
             JsonNode root = OBJECT_MAPPER.readTree(body);
 
-            String gifUrl = root.path("data")
-                    .path("data")
-                    .get(0)
+            JsonNode results = root.path("data").path("data");
+
+            if (!results.isArray() || results.isEmpty()) {
+                return Optional.empty();
+            }
+
+            int randomIndex = ThreadLocalRandom.current().nextInt(results.size());
+
+            String gifUrl = results.get(randomIndex)
                     .path("file")
                     .path("hd")
                     .path("gif")
                     .path("url")
                     .asString();
 
-            return Optional.of(gifUrl);
+            return Optional.ofNullable(gifUrl.isEmpty() ? null : gifUrl);
+
         } catch (IOException | InterruptedException e) {
             LOGGER.error("Failed to make request to Klippy", e);
         }

@@ -35,7 +35,7 @@ public class BonkCommand extends SlashCommand {
         EmbedBuilder builder = new EmbedBuilder();
         builder.setColor(Color.CYAN);
         builder.setTitle("/bonk");
-        builder.setDescription(event.getUser().getAsMention() + " bonk " + target.getAsMention());
+        builder.setDescription(event.getUser().getAsMention() + " bonks " + target.getAsMention());
         builder.setImage(gifUrl);
 
         event.replyEmbeds(builder.build()).queue();
