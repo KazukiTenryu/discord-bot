@@ -29,6 +29,12 @@ public class GlobalEventListener extends ListenerAdapter {
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
         String name = event.getName();
 
+        LOGGER.info(
+                "/{} used by {} (id: {})",
+                name,
+                event.getUser().getName(),
+                event.getUser().getId());
+
         try {
             Optional<SlashCommand> optionalSlashCommand = slashCommandRepository.getCommands().stream()
                     .filter(cmd -> cmd.getName().equals(name))
