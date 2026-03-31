@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'application'
     id 'com.diffplug.spotless' version '8.3.0'
+    id 'nu.studer.jooq' version '9.0'
 }
 
 application {
@@ -35,10 +36,53 @@ dependencies {
     implementation 'org.apache.logging.log4j:log4j-api:2.25.3'
     implementation 'org.apache.logging.log4j:log4j-core:2.25.3'
     annotationProcessor 'org.apache.logging.log4j:log4j-core:2.25.3'
-
     implementation 'org.slf4j:slf4j-nop:2.0.17'
 
     implementation 'tools.jackson.core:jackson-core:3.1.0'
     implementation 'tools.jackson.core:jackson-databind:3.1.0'
     implementation 'com.fasterxml.jackson.core:jackson-annotations:2.21'
+
+    implementation 'org.flywaydb:flyway-core:12.2.0'
+    implementation 'org.jooq:jooq:3.21.1'
+    implementation 'org.jooq:jooq-codegen:3.21.1'
+    implementation 'org.jooq:jooq-meta:3.21.1'
+    implementation 'com.zaxxer:HikariCP:7.0.2'
+    implementation 'org.xerial:sqlite-jdbc:3.51.3.0'
+    jooqGenerator 'org.xerial:sqlite-jdbc:3.51.3.0'
+}
+
+jooq {
+    version = '3.19.8'
+
+    configurations {
+        main {
+            generationTool {
+                jdbc {
+                    driver = 'org.sqlite.JDBC'
+                    url = 'jdbc:sqlite:bot.db'
+                }
+                generator {
+                    database {
+                        name = 'org.jooq.meta.sqlite.SQLiteDatabase'
+                    }
+                    target {
+                        packageName = 'bot.database.jooq'
+                        directory = 'build/generated-src/jooq/main'
+                    }
+                }
+            }
+        }
+    }
+}
+
+sourceSets.main.java.srcDirs += 'build/generated-src/jooq/main'
+
+tasks.register('migrateDb', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'org.flywaydb.core.Flyway'
+    args = ['migrate']
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs += ["-Xlint:-deprecation"]
 }

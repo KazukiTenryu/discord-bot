@@ -9,6 +9,7 @@ import net.dv8tion.jda.api.requests.restaction.CommandListUpdateAction;
 
 import bot.config.Config;
 import bot.config.ConfigLoader;
+import bot.database.Database;
 import bot.slash.SlashCommandRepository;
 
 public class Main {
@@ -20,10 +21,12 @@ public class Main {
             System.setProperty("infoLogsChannelWebHookURL", config.infoLogsChannelWebHookURL());
             System.setProperty("errorLogsChannelWebHookURL", config.errorLogsChannelWebHookURL());
 
+            Database database = new Database("jdbc:sqlite:" + config.dbFile());
+
             SlashCommandRepository slashCommandRepository = new SlashCommandRepository(config);
 
             JDA jda = JDABuilder.createLight(config.botToken(), EnumSet.allOf(GatewayIntent.class))
-                    .addEventListeners(new GlobalEventListener(config, slashCommandRepository))
+                    .addEventListeners(new GlobalEventListener(config, database, slashCommandRepository))
                     .build();
 
             CommandListUpdateAction commands = jda.updateCommands();
