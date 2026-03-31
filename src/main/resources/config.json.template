@@ -2,5 +2,6 @@
     "botToken": "<your_bot_token>",
     "muteRole": "Muted",
     "infoLogsChannelWebHookURL": "",
-    "errorLogsChannelWebHookURL": ""
+    "errorLogsChannelWebHookURL": "",
+    "dbFile": "bot.db"
 }

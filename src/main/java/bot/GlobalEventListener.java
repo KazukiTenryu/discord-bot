@@ -9,16 +9,19 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import bot.config.Config;
+import bot.database.Database;
 import bot.slash.SlashCommand;
 import bot.slash.SlashCommandRepository;
 
 public class GlobalEventListener extends ListenerAdapter {
     private static final Logger LOGGER = LogManager.getLogger(GlobalEventListener.class);
     private final Config config;
+    private final Database database;
     private final SlashCommandRepository slashCommandRepository;
 
-    public GlobalEventListener(Config config, SlashCommandRepository slashCommandRepository) {
+    public GlobalEventListener(Config config, Database database, SlashCommandRepository slashCommandRepository) {
         this.config = config;
+        this.database = database;
         this.slashCommandRepository = slashCommandRepository;
     }
 

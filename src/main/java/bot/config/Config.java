@@ -8,4 +8,5 @@ public record Config(
         @JsonProperty("botToken") String botToken,
         @JsonProperty("muteRole") String muteRole,
         @JsonProperty("infoLogsChannelWebHookURL") String infoLogsChannelWebHookURL,
-        @JsonProperty("errorLogsChannelWebHookURL") String errorLogsChannelWebHookURL) {}
+        @JsonProperty("errorLogsChannelWebHookURL") String errorLogsChannelWebHookURL,
+        @JsonProperty("dbFile") String dbFile) {}
