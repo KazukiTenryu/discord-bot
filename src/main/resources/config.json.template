@@ -3,5 +3,6 @@
     "muteRole": "Muted",
     "infoLogsChannelWebHookURL": "",
     "errorLogsChannelWebHookURL": "",
-    "dbFile": "bot.db"
+    "dbFile": "bot.db",
+    "klippyApiKey": "<your_api_key>"
 }

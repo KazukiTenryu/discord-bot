@@ -9,4 +9,5 @@ public record Config(
         @JsonProperty("muteRole") String muteRole,
         @JsonProperty("infoLogsChannelWebHookURL") String infoLogsChannelWebHookURL,
         @JsonProperty("errorLogsChannelWebHookURL") String errorLogsChannelWebHookURL,
-        @JsonProperty("dbFile") String dbFile) {}
+        @JsonProperty("dbFile") String dbFile,
+        @JsonProperty("klippyApiKey") String klippyApiKey) {}

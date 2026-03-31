@@ -6,6 +6,7 @@ import java.util.List;
 import bot.config.Config;
 import bot.database.Database;
 import bot.slash.moderation.*;
+import bot.slash.pet.PetCommand;
 import bot.slash.ping.PingCommand;
 import bot.slash.rate.RateCommand;
 
@@ -26,6 +27,7 @@ public class SlashCommandRepository {
         commands.add(new RulesCommand());
         commands.add(new NoteCommand(database));
         commands.add(new AuditCommand(database));
+        commands.add(new PetCommand(config));
     }
 
     public List<SlashCommand> getCommands() {
