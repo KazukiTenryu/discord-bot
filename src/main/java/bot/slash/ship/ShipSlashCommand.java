@@ -10,6 +10,7 @@ import java.util.concurrent.ThreadLocalRandom;
 
 import javax.imageio.ImageIO;
 
+import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
@@ -64,8 +65,21 @@ public class ShipSlashCommand extends SlashCommand {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             ImageIO.write(image, "png", baos);
 
+            byte[] imageData = baos.toByteArray();
+            FileUpload file = FileUpload.fromData(imageData, "ship.png");
+
+            String mentionA = userA.getAsMention();
+            String mentionB = userB.getAsMention();
+
+            EmbedBuilder embed = new EmbedBuilder();
+            embed.setTitle(getShipTitle(percent));
+            embed.setColor(new Color(255, 105, 180)); // cute pink
+            embed.setDescription(mentionA + " ❤️❤️❤️ " + mentionB);
+            embed.setImage("attachment://ship.png");
+
             event.getHook()
-                    .sendFiles(FileUpload.fromData(baos.toByteArray(), "ship.png"))
+                    .sendFiles(file)
+                    .addEmbeds(embed.build())
                     .queue();
         } catch (Exception e) {
             LOGGER.error("Failed to handle /{}", event.getName(), e);
@@ -182,5 +196,157 @@ public class ShipSlashCommand extends SlashCommand {
 
         g.setColor(Color.WHITE);
         g.drawString(text, x, y);
+    }
+
+    private static final ThreadLocalRandom RNG = ThreadLocalRandom.current();
+
+    private String getShipTitle(int percent) {
+
+        if (percent < 10) return randomFrom(
+                "💀 This should be illegal.",
+                "The universe said NO.",
+                "Blocked in every timeline.",
+                "Even enemies have more chemistry.",
+                "Discord TOS violation level pairing.",
+                "A love story written in crayon and tears.",
+                "Absolutely catastrophic.",
+                "Cupid missed and hit the wall.",
+                "This ship sank before leaving port.",
+                "Please reconsider your life choices."
+        );
+
+        if (percent < 20) return randomFrom(
+                "This is a certified disaster.",
+                "Maybe… don’t try this.",
+                "Yikes 😬",
+                "Friendzone speedrun.",
+                "Chemistry not detected.",
+                "The vibes are… absent.",
+                "Cupid is on vacation.",
+                "This feels illegal somehow.",
+                "Please remain 10 meters apart.",
+                "We recommend therapy instead."
+        );
+
+        if (percent < 30) return randomFrom(
+                "Please stay friends.",
+                "Not the worst… but close.",
+                "A risky experiment.",
+                "There is… potential? maybe?",
+                "The spark is buffering.",
+                "It’s giving awkward silence.",
+                "This could start a sitcom.",
+                "Strangers energy.",
+                "Low battery relationship.",
+                "Patch notes required."
+        );
+
+        if (percent < 40) return randomFrom(
+                "Hmm… maybe in another timeline.",
+                "A small spark exists.",
+                "Early access relationship.",
+                "Needs DLC to work.",
+                "We’re warming up.",
+                "Beta testing love.",
+                "Plot development required.",
+                "Slow burn arc starting.",
+                "The romcom just began.",
+                "We see potential."
+        );
+
+        if (percent < 50) return randomFrom(
+                "There’s a tiny spark.",
+                "Now we’re getting somewhere.",
+                "Cute but clumsy.",
+                "This could become something.",
+                "Early butterflies detected.",
+                "Halfway to adorable.",
+                "We’re cautiously optimistic.",
+                "It might just work.",
+                "Potential unlocked.",
+                "The ship is floating!"
+        );
+
+        if (percent < 60) return randomFrom(
+                "This could work 👀",
+                "Okay this is kinda cute.",
+                "Chemistry increasing.",
+                "Love.exe starting.",
+                "We’re vibing now.",
+                "This ship has wind!",
+                "Not bad at all.",
+                "Things are heating up.",
+                "We approve this ship.",
+                "Romance arc unlocked."
+        );
+
+        if (percent < 70) return randomFrom(
+                "Looking pretty cute together!",
+                "This ship is sailing!",
+                "Love is in the air 💕",
+                "Strong romcom energy.",
+                "Now we’re talking!",
+                "Very promising duo.",
+                "This feels right.",
+                "Certified cute couple.",
+                "Cupid is paying attention.",
+                "The fandom approves."
+        );
+
+        if (percent < 80) return randomFrom(
+                "Now we’re talking 💕",
+                "Serious relationship vibes.",
+                "This ship has momentum.",
+                "Chemistry level: HIGH.",
+                "A very cute couple.",
+                "Romance anime arc unlocked.",
+                "This is getting real.",
+                "Heart eyes detected 😍",
+                "Love is blooming.",
+                "We ship it!"
+        );
+
+        if (percent < 90) return randomFrom(
+                "This is getting serious 😳",
+                "We hear wedding bells.",
+                "Power couple energy.",
+                "The romance arc peaked.",
+                "Main character couple.",
+                "The ship is unstoppable.",
+                "Love overload.",
+                "Couple goals unlocked.",
+                "This is beautiful.",
+                "True love arc."
+        );
+
+        if (percent < 100) return randomFrom(
+                "A match made in heaven 💖",
+                "This is destiny.",
+                "Cosmic level compatibility.",
+                "The stars aligned.",
+                "Perfectly synced souls.",
+                "Legendary romance.",
+                "The ultimate ship.",
+                "Fate approved this.",
+                "Heaven signed the papers.",
+                "Peak love achieved."
+        );
+
+        return randomFrom(
+                "💍 Soulmates. Wedding when?",
+                "This is THE ship.",
+                "Absolute perfection.",
+                "Marriage speedrun.",
+                "The universe ships this.",
+                "Unbreakable bond.",
+                "True love confirmed.",
+                "They were written in the stars.",
+                "Happily ever after unlocked.",
+                "Maximum love achieved."
+        );
+    }
+
+    private String randomFrom(String... options) {
+        return options[RNG.nextInt(options.length)];
     }
 }
