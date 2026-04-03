@@ -13,7 +13,7 @@
     </Appenders>
 
     <Loggers>
-        <Logger name="bot" level="error" additivity="false">
+        <Logger name="bot" level="info" additivity="false">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="DiscordLoggingAppender"/>
         </Logger>
