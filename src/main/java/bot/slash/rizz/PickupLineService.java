@@ -3,9 +3,10 @@ package bot.slash.rizz;
 import java.util.List;
 import java.util.Optional;
 
-import bot.utils.KimiService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import bot.utils.KimiService;
 
 /**
  * Service for generating pickup lines using AI.
