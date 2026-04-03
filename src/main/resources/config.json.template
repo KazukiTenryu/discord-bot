@@ -4,5 +4,6 @@
     "infoLogsChannelWebHookURL": "",
     "errorLogsChannelWebHookURL": "",
     "dbFile": "bot.db",
-    "klippyApiKey": "<your_api_key>"
+    "klippyApiKey": "<your_api_key>",
+    "kimiApiKey": "<your_api_key>"
 }

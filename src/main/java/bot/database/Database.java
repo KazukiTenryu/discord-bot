@@ -36,6 +36,8 @@ public class Database {
         Flyway flyway = Flyway.configure()
                 .dataSource(sqlite)
                 .locations("classpath:/db/")
+                .baselineOnMigrate(true)
+                .baselineVersion("0")
                 .load();
         flyway.migrate();
 

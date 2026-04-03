@@ -9,6 +9,7 @@ import bot.slash.moderation.*;
 import bot.slash.pet.*;
 import bot.slash.ping.PingCommand;
 import bot.slash.rate.RateCommand;
+import bot.slash.rizz.RizzCommand;
 import bot.slash.ship.ShipCommand;
 
 public class SlashCommandRepository {
@@ -25,6 +26,7 @@ public class SlashCommandRepository {
         commands.add(new UnmuteCommand(config));
         commands.add(new KickCommand());
         commands.add(new RateCommand());
+        commands.add(new RizzCommand(config));
         commands.add(new RulesCommand());
         commands.add(new NoteCommand(database));
         commands.add(new AuditCommand(database));

@@ -10,4 +10,5 @@ public record Config(
         @JsonProperty("infoLogsChannelWebHookURL") String infoLogsChannelWebHookURL,
         @JsonProperty("errorLogsChannelWebHookURL") String errorLogsChannelWebHookURL,
         @JsonProperty("dbFile") String dbFile,
-        @JsonProperty("klippyApiKey") String klippyApiKey) {}
+        @JsonProperty("klippyApiKey") String klippyApiKey,
+        @JsonProperty("kimiApiKey") String kimiApiKey) {}
