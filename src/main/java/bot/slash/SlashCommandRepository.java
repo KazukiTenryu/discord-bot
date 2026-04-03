@@ -9,6 +9,7 @@ import bot.slash.moderation.*;
 import bot.slash.pet.*;
 import bot.slash.ping.PingCommand;
 import bot.slash.rate.RateCommand;
+import bot.slash.ship.ShipCommand;
 
 public class SlashCommandRepository {
     private final List<SlashCommand> commands;
@@ -27,6 +28,7 @@ public class SlashCommandRepository {
         commands.add(new RulesCommand());
         commands.add(new NoteCommand(database));
         commands.add(new AuditCommand(database));
+        commands.add(new ShipCommand(config));
         commands.addAll(ActionCommand.registerActionCommands(new HandleCommandAction(config)));
     }
 
