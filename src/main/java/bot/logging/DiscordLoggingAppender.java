@@ -20,6 +20,7 @@ import org.apache.logging.log4j.core.layout.PatternLayout;
         category = Core.CATEGORY_NAME,
         elementType = Appender.ELEMENT_TYPE,
         printObject = true)
+@SuppressWarnings("unused")
 public class DiscordLoggingAppender extends AbstractAppender {
     private static final HttpClient HTTP_CLIENT = HttpClient.newHttpClient();
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm:ss");
