@@ -12,6 +12,7 @@ import bot.slash.ping.PingCommand;
 import bot.slash.rate.RateCommand;
 import bot.slash.rizz.RizzCommand;
 import bot.slash.ship.ShipCommand;
+import bot.slash.truthordare.TruthOrDareCommand;
 
 public class SlashCommandRepository {
     private final List<SlashCommand> commands;
@@ -29,6 +30,7 @@ public class SlashCommandRepository {
         commands.add(new RateCommand());
         commands.add(new RizzCommand(config));
         commands.add(new GifCommand(config));
+        commands.add(new TruthOrDareCommand(config));
         commands.add(new RulesCommand());
         commands.add(new NoteCommand(database));
         commands.add(new AuditCommand(database));

@@ -28,7 +28,7 @@ public class KimiService {
             HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    private static final String KIMI_API_URL = "https://api.moonshot.cn/v1/chat/completions";
+    private static final String KIMI_API_URL = "https://api.moonshot.ai/v1/chat/completions";
 
     private final String apiKey;
     private final String defaultModel;
@@ -63,7 +63,15 @@ public class KimiService {
      * Check if the API key is configured.
      */
     public boolean isConfigured() {
-        return apiKey != null && !apiKey.isBlank();
+        boolean configured = apiKey != null && !apiKey.isBlank();
+        if (configured) {
+            // Log first 8 chars of key for debugging (safe to show)
+            String keyPreview = apiKey.substring(0, Math.min(8, apiKey.length())) + "...";
+            LOGGER.debug("Kimi API key configured: {}", keyPreview);
+        } else {
+            LOGGER.warn("Kimi API key not configured");
+        }
+        return configured;
     }
 
     /**
