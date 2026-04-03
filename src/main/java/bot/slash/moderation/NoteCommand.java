@@ -48,10 +48,10 @@ public class NoteCommand extends SlashCommand {
         builder.setColor(Color.GREEN);
         builder.setTitle("/note");
         builder.setDescription("""
-                %s wrote a note about %s
+                %s wrote a note about %s (id: %s)
 
                 %s
-                """.formatted(event.getUser().getAsMention(), target.getAsMention(), content));
+                """.formatted(event.getUser().getName(), event.getUser().getId(), target.getAsMention(), content));
         builder.setFooter(TimeUtils.now());
 
         event.replyEmbeds(builder.build()).queue();
