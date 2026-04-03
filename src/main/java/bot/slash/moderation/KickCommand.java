@@ -19,7 +19,7 @@ public class KickCommand extends SlashCommand {
     public KickCommand() {
         super("kick", "Removes a user from the server");
 
-        OptionData user = new OptionData(OptionType.USER, USER_OPTION, "the user to mute", true);
+        OptionData user = new OptionData(OptionType.USER, USER_OPTION, "the user to kick", true);
         OptionData reason =
                 new OptionData(OptionType.STRING, REASON_OPTION, "the reason the user has been kicked", true);
 
