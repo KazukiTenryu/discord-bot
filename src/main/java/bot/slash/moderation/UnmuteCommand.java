@@ -16,7 +16,6 @@ import bot.slash.SlashCommand;
 
 public class UnmuteCommand extends SlashCommand {
     private static final String USER_OPTION = "user";
-    private static final String REASON_OPTION = "reason";
     private final String muteRole;
 
     public UnmuteCommand(Config config) {
