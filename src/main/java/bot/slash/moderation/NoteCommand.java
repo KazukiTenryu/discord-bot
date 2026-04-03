@@ -47,7 +47,8 @@ public class NoteCommand extends SlashCommand {
         EmbedBuilder builder = new EmbedBuilder();
         builder.setColor(Color.GREEN);
         builder.setTitle("/note");
-        builder.setDescription("""
+        builder.setDescription(
+                """
                 %s wrote a note about %s (id: %s)
 
                 %s

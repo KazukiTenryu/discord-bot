@@ -27,12 +27,7 @@ public class SlashCommandRepository {
         commands.add(new RulesCommand());
         commands.add(new NoteCommand(database));
         commands.add(new AuditCommand(database));
-
-        HandleCommandAction handleCommandAction = new HandleCommandAction(config);
-        commands.add(new PetCommand(handleCommandAction));
-        commands.add(new BonkCommand(handleCommandAction));
-        commands.add(new HugCommand(handleCommandAction));
-        commands.add(new WorshipCommand(handleCommandAction));
+        commands.addAll(ActionCommand.registerActionCommands(new HandleCommandAction(config)));
     }
 
     public List<SlashCommand> getCommands() {
