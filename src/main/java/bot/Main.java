@@ -17,9 +17,12 @@ import bot.config.Config;
 import bot.config.ConfigLoader;
 import bot.database.Database;
 import bot.listeners.MessageReceivedListener;
+import bot.metrics.MetricService;
 import bot.slash.SlashCommandRepository;
 
 public class Main {
+    private static MetricService metricService;
+
     void main() {
         System.out.println("Starting bot...");
 
@@ -29,6 +32,7 @@ public class Main {
             System.setProperty("errorLogsChannelWebHookURL", config.errorLogsChannelWebHookURL());
 
             Database database = new Database("jdbc:sqlite:" + config.dbFile());
+            metricService = new MetricService(database);
 
             SlashCommandRepository slashCommandRepository = new SlashCommandRepository(config, database);
 
@@ -53,5 +57,12 @@ public class Main {
         } catch (Exception e) {
             System.err.println("Failed to start application: " + e.getMessage());
         }
+    }
+
+    public static MetricService getMetrics() {
+        if (metricService != null) {
+            return metricService;
+        }
+        throw new NullPointerException("Metrics class has not been initalised");
     }
 }
