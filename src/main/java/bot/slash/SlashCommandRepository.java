@@ -11,6 +11,7 @@ import bot.slash.pet.*;
 import bot.slash.ping.PingCommand;
 import bot.slash.rate.RateCommand;
 import bot.slash.rizz.RizzCommand;
+import bot.slash.rolemenu.RoleSelectCommand;
 import bot.slash.ship.ShipCommand;
 import bot.slash.truthordare.TruthOrDareCommand;
 
@@ -35,6 +36,8 @@ public class SlashCommandRepository {
         commands.add(new NoteCommand(database));
         commands.add(new AuditCommand(database));
         commands.add(new ShipCommand(config));
+        commands.add(new RoleSelectCommand());
+
         commands.addAll(ActionCommand.registerActionCommands(new HandleCommandAction(config)));
     }
 

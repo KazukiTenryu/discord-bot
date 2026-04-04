@@ -1,8 +1,14 @@
 package bot;
 
+import java.util.Arrays;
+import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
+import net.dv8tion.jda.api.entities.Member;
+import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 
 import org.apache.logging.log4j.LogManager;
@@ -42,6 +48,65 @@ public class GlobalEventListener extends ListenerAdapter {
             optionalSlashCommand.ifPresent(slashCommand -> slashCommand.handle(event));
         } catch (Exception e) {
             LOGGER.error("Failed to handle slash command /{}", name, e);
+        }
+    }
+
+    @Override
+    public void onStringSelectInteraction(StringSelectInteractionEvent event) {
+        String componentId = event.getComponentId();
+
+        if (componentId.startsWith("r")) {
+            List<String> selectedValues = event.getValues();
+
+            if (selectedValues.isEmpty()) {
+                return;
+            }
+
+            String selectedRoleId = selectedValues.getFirst();
+            String roleIdsPart = componentId.substring("r".length());
+            List<String> allRoleIdsInGroup = Arrays.asList(roleIdsPart.split(","));
+
+            Role selectedRole = Objects.requireNonNull(event.getGuild()).getRoleById(selectedRoleId);
+
+            if (selectedRole == null) {
+                event.reply("That role no longer exists.").setEphemeral(true).queue();
+                return;
+            }
+
+            Member member = Objects.requireNonNull(event.getMember());
+
+            List<Role> rolesToRemove = allRoleIdsInGroup.stream()
+                    .map(roleId -> event.getGuild().getRoleById(roleId))
+                    .filter(Objects::nonNull)
+                    .filter(role -> !role.getId().equals(selectedRoleId))
+                    .filter(member.getRoles()::contains)
+                    .toList();
+
+            for (Role role : rolesToRemove) {
+                event.getGuild().removeRoleFromMember(member, role).queue();
+            }
+
+            if (member.getRoles().contains(selectedRole)) {
+                event.getGuild()
+                        .removeRoleFromMember(member, selectedRole)
+                        .queue(
+                                _ -> event.reply("Removed role: " + selectedRole.getName())
+                                        .setEphemeral(true)
+                                        .queue(),
+                                error -> event.reply("Failed to remove role: " + error.getMessage())
+                                        .setEphemeral(true)
+                                        .queue());
+            } else {
+                event.getGuild()
+                        .addRoleToMember(member, selectedRole)
+                        .queue(
+                                _ -> event.reply("Added role: " + selectedRole.getName())
+                                        .setEphemeral(true)
+                                        .queue(),
+                                error -> event.reply("Failed to add role: " + error.getMessage())
+                                        .setEphemeral(true)
+                                        .queue());
+            }
         }
     }
 }
