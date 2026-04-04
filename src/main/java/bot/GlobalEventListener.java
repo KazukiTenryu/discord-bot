@@ -7,6 +7,7 @@ import java.util.Optional;
 
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Role;
+import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
@@ -48,6 +49,20 @@ public class GlobalEventListener extends ListenerAdapter {
             optionalSlashCommand.ifPresent(slashCommand -> slashCommand.handle(event));
         } catch (Exception e) {
             LOGGER.error("Failed to handle slash command /{}", name, e);
+        }
+    }
+
+    @Override
+    public void onCommandAutoCompleteInteraction(CommandAutoCompleteInteractionEvent event) {
+        String name = event.getName();
+
+        try {
+            Optional<SlashCommand> optionalSlashCommand = slashCommandRepository.getCommands().stream()
+                    .filter(cmd -> cmd.getName().equals(name))
+                    .findFirst();
+            optionalSlashCommand.ifPresent(slashCommand -> slashCommand.onAutoComplete(event));
+        } catch (Exception e) {
+            LOGGER.error("Failed to handle autocomplete for /{}", name, e);
         }
     }
 

@@ -1,5 +1,6 @@
 package bot.slash;
 
+import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
@@ -14,6 +15,8 @@ public abstract class SlashCommand {
     }
 
     public abstract void handle(SlashCommandInteractionEvent event);
+
+    public void onAutoComplete(CommandAutoCompleteInteractionEvent event) {}
 
     public String getName() {
         return name;
