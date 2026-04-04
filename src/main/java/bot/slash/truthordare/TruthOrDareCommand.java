@@ -32,12 +32,13 @@ public class TruthOrDareCommand extends SlashCommand {
         super("truth-or-dare", "Spicy truth or dare with your server members 🔥");
         this.kimiService = new KimiService(config.kimiApiKey());
 
+        getData().addOptions(new OptionData(OptionType.USER, TARGET_OPTION, "Who to challenge", true));
+
         getData()
                 .addOptions(new OptionData(OptionType.STRING, MODE_OPTION, "What do you choose?", false)
                         .addChoice("🎯 Truth", "truth")
                         .addChoice("😈 Dare", "dare")
                         .addChoice("🎲 Random", "random"));
-        getData().addOptions(new OptionData(OptionType.USER, TARGET_OPTION, "Who to challenge", false));
         getData()
                 .addOptions(
                         new OptionData(OptionType.STRING, THEME_OPTION, "Theme (e.g. funny, nsfw, chaotic)", false));
