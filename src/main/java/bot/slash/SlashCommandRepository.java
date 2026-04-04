@@ -15,6 +15,7 @@ import bot.slash.rolemenu.RoleSelectCommand;
 import bot.slash.ship.ShipCommand;
 import bot.slash.time.TimeCommand;
 import bot.slash.truthordare.TruthOrDareCommand;
+import bot.slash.wouldyourather.WouldYouRatherCommand;
 
 public class SlashCommandRepository {
     private final List<SlashCommand> commands;
@@ -39,6 +40,7 @@ public class SlashCommandRepository {
         commands.add(new ShipCommand(config));
         commands.add(new RoleSelectCommand());
         commands.add(new TimeCommand());
+        commands.add(new WouldYouRatherCommand(config));
 
         commands.addAll(ActionCommand.registerActionCommands(new HandleCommandAction(config)));
     }
