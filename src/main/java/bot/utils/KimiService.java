@@ -8,11 +8,13 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import bot.Main;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ArrayNode;
@@ -124,6 +126,8 @@ public class KimiService {
         }
 
         try {
+            Main.getMetrics().count("ai_usage", Map.of("model", "kimi"));
+
             String requestBody = buildRequestBody(messages, model, temperature, maxTokens);
 
             HttpRequest request = HttpRequest.newBuilder()
@@ -136,6 +140,9 @@ public class KimiService {
             HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != 200) {
+                Main.getMetrics()
+                        .count("ai_request_fail", Map.of("model", "kimi", "statusCode", response.statusCode()));
+
                 LOGGER.error("Kimi API returned status {}: {}", response.statusCode(), response.body());
                 return Optional.empty();
             }

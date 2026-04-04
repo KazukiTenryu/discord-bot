@@ -1,5 +1,6 @@
 package bot.listeners;
 
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
@@ -11,6 +12,7 @@ import net.dv8tion.jda.api.hooks.ListenerAdapter;
 
 import org.jspecify.annotations.NonNull;
 
+import bot.Main;
 import bot.config.Config;
 import bot.utils.KimiService;
 
@@ -42,6 +44,19 @@ public class MessageReceivedListener extends ListenerAdapter {
     @Override
     public void onMessageReceived(@NonNull MessageReceivedEvent event) {
         Message message = event.getMessage();
+
+        Main.getMetrics()
+                .count(
+                        "message_sent",
+                        Map.of(
+                                "user",
+                                event.getAuthor().getName(),
+                                "bot",
+                                event.getAuthor().isBot(),
+                                "channelId",
+                                event.getChannel().getId(),
+                                "timestamp",
+                                Instant.now().toEpochMilli()));
 
         if (message.getAuthor().isBot()) {
             return;

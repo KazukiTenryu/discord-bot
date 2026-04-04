@@ -1,9 +1,6 @@
 package bot;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Role;
@@ -43,11 +40,17 @@ public class GlobalEventListener extends ListenerAdapter {
                 event.getUser().getId());
 
         try {
+            Main.getMetrics().count("slash", Map.of("userId", event.getUser().getIdLong(), "name", name));
+
             Optional<SlashCommand> optionalSlashCommand = slashCommandRepository.getCommands().stream()
                     .filter(cmd -> cmd.getName().equals(name))
                     .findFirst();
+
             optionalSlashCommand.ifPresent(slashCommand -> slashCommand.handle(event));
+
         } catch (Exception e) {
+            Main.getMetrics().count("slash_failure", Map.of("name", name));
+
             LOGGER.error("Failed to handle slash command /{}", name, e);
         }
     }
@@ -96,6 +99,8 @@ public class GlobalEventListener extends ListenerAdapter {
                     .filter(role -> !role.getId().equals(selectedRoleId))
                     .filter(member.getRoles()::contains)
                     .toList();
+
+            Main.getMetrics().count("role_selection", Map.of("role", selectedRole.getName()));
 
             for (Role role : rolesToRemove) {
                 event.getGuild().removeRoleFromMember(member, role).queue();
