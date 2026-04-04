@@ -6,6 +6,7 @@ import java.util.List;
 import bot.config.Config;
 import bot.database.Database;
 import bot.slash.gif.GifCommand;
+import bot.slash.kissorslap.KissOrSlapCommand;
 import bot.slash.moderation.*;
 import bot.slash.pet.*;
 import bot.slash.ping.PingCommand;
@@ -39,6 +40,7 @@ public class SlashCommandRepository {
         commands.add(new RoleSelectCommand());
         commands.add(new TimeCommand());
         commands.add(new WouldYouRatherCommand(config));
+        commands.add(new KissOrSlapCommand());
 
         AuditService auditService = new AuditService(database);
         commands.add(new NoteCommand(auditService));
