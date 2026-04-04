@@ -18,11 +18,13 @@ public class MuteCommand extends SlashCommand {
     private static final String USER_OPTION = "user";
     private static final String REASON_OPTION = "reason";
     private final String muteRole;
+    private final AuditService auditService;
 
-    public MuteCommand(Config config) {
+    public MuteCommand(Config config, AuditService auditService) {
         super("mute", "Mutes a given user so they cannot send messages anymore");
 
         this.muteRole = config.muteRole();
+        this.auditService = auditService;
 
         OptionData user = new OptionData(OptionType.USER, USER_OPTION, "the user to mute", true);
         OptionData reason =
@@ -45,6 +47,8 @@ public class MuteCommand extends SlashCommand {
             event.reply(target.getAsMention() + " is already muted").queue();
             return;
         }
+
+        auditService.saveAudit(event.getMember(), target, "mute", reason);
 
         guild.addRoleToMember(target, role).reason(reason).queue();
         target.getUser().openPrivateChannel().queue(channel -> {

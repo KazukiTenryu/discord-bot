@@ -15,9 +15,12 @@ import bot.slash.SlashCommand;
 public class KickCommand extends SlashCommand {
     private static final String USER_OPTION = "user";
     private static final String REASON_OPTION = "reason";
+    private final AuditService auditService;
 
-    public KickCommand() {
+    public KickCommand(AuditService auditService) {
         super("kick", "Removes a user from the server");
+
+        this.auditService = auditService;
 
         OptionData user = new OptionData(OptionType.USER, USER_OPTION, "the user to kick", true);
         OptionData reason =
@@ -35,6 +38,8 @@ public class KickCommand extends SlashCommand {
         Guild guild = Objects.requireNonNull(event.getGuild());
 
         guild.kick(target).queue();
+
+        auditService.saveAudit(event.getMember(), target, "kick", reason);
 
         target.getUser().openPrivateChannel().queue(channel -> {
             EmbedBuilder builder = new EmbedBuilder();

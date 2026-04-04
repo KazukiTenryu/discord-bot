@@ -27,20 +27,24 @@ public class SlashCommandRepository {
 
     private void registerCommands(Config config, Database database) {
         commands.add(new PingCommand());
-        commands.add(new MuteCommand(config));
-        commands.add(new UnmuteCommand(config));
-        commands.add(new KickCommand());
+
         commands.add(new RateCommand());
         commands.add(new RizzCommand(config));
         commands.add(new GifCommand(config));
         commands.add(new TruthOrDareCommand(config));
         commands.add(new RulesCommand());
-        commands.add(new NoteCommand(database));
+
         commands.add(new AuditCommand(database));
         commands.add(new ShipCommand(config));
         commands.add(new RoleSelectCommand());
         commands.add(new TimeCommand());
         commands.add(new WouldYouRatherCommand(config));
+
+        AuditService auditService = new AuditService(database);
+        commands.add(new NoteCommand(auditService));
+        commands.add(new KickCommand(auditService));
+        commands.add(new MuteCommand(config, auditService));
+        commands.add(new UnmuteCommand(config, auditService));
 
         commands.addAll(ActionCommand.registerActionCommands(new HandleCommandAction(config)));
     }

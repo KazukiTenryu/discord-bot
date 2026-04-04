@@ -16,20 +16,26 @@ import bot.slash.SlashCommand;
 
 public class UnmuteCommand extends SlashCommand {
     private static final String USER_OPTION = "user";
+    private static final String REASON_OPTION = "reason";
     private final String muteRole;
+    private final AuditService auditService;
 
-    public UnmuteCommand(Config config) {
+    public UnmuteCommand(Config config, AuditService auditService) {
         super("unmute", "Unmutes a user so they can send messages again");
 
         this.muteRole = config.muteRole();
+        this.auditService = auditService;
 
         getData().addOptions(new OptionData(OptionType.USER, USER_OPTION, "the user to unmute", true));
+        getData().addOptions(new OptionData(OptionType.USER, REASON_OPTION, "the reason the user was unmuted", true));
     }
 
     @Override
     public void handle(SlashCommandInteractionEvent event) {
         Member target = Objects.requireNonNull(
                 Objects.requireNonNull(event.getOption(USER_OPTION)).getAsMember());
+
+        String reason = Objects.requireNonNull(event.getOption(REASON_OPTION)).getAsString();
 
         Guild guild = event.getGuild();
         Role role =
@@ -39,6 +45,8 @@ public class UnmuteCommand extends SlashCommand {
             event.reply(target.getAsMention() + " is already unmuted").queue();
             return;
         }
+
+        auditService.saveAudit(event.getMember(), target, "unmute", reason);
 
         guild.removeRoleFromMember(target, role).queue();
 

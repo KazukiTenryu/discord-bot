@@ -53,7 +53,11 @@ public class AuditCommand extends SlashCommand {
         }
 
         for (UserNotesRecord note : notes) {
-            sb.append("\n\n**Note by ").append(note.getFromUser()).append("**");
+            sb.append("\n\n**")
+                    .append(note.getAuditType().toUpperCase())
+                    .append(" by ")
+                    .append(note.getFromUser())
+                    .append("**");
             sb.append("\n");
             sb.append(note.getContent());
             sb.append("\n");
