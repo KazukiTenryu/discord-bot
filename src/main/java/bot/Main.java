@@ -23,7 +23,7 @@ import bot.slash.SlashCommandRepository;
 public class Main {
     private static MetricService metricService;
 
-    void main() {
+    public static void main(String[] args) {
         System.out.println("Starting bot...");
 
         try {

@@ -7,7 +7,7 @@ COPY gradle/ gradle/
 COPY src/ src/
 COPY build/generated-src build/generated-src
 
-RUN ./gradlew build --no-daemon
+RUN ./gradlew shadowJar
 
 FROM eclipse-temurin:25-jdk-alpine
 
@@ -15,7 +15,7 @@ WORKDIR /app
 
 RUN addgroup -S botgroup && adduser -S botuser -G botgroup
 
-COPY --from=builder /app/build/libs/*.jar app.jar
+COPY --from=builder /app/build/libs/app.jar app.jar
 
 RUN mkdir -p /app/config /app/data && chown -R botuser:botgroup /app
 
