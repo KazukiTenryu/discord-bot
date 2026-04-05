@@ -1,0 +1,39 @@
+# Git
+.git/
+.gitignore
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# Gradle
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Database files (will be mounted as volumes)
+bot.db
+bot.db-shm
+bot.db-wal
+*.db
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker files themselves (not needed in context)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Documentation
+README.md
+
+# Python (setup script)
+setup.py

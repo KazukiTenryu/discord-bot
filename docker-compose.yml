@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  discord-bot:
+    build: .
+    container_name: discord-bot
+    restart: unless-stopped
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./bot.db:/app/bot.db
+
+volumes:
+  bot-data:
+    driver: local
