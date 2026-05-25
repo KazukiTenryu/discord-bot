@@ -60,7 +60,15 @@ public final class ModerationClassifier {
               - Identity-based slurs or hateful language targeting a group
               - Sustained, targeted harassment aimed at a specific user (one barb is not harassment)
               - Sexual content, sexualisation of minors, predatory behaviour, grooming
-              - Encouragement of self-harm, suicide, or eating disorders (real, not hyperbole)
+              - Encouragement of self-harm, suicide, or eating disorders. Must be a clear, literal
+                statement of intent or encouragement — NOT idioms or hyperbole. Words like "cut",
+                "kill", "die", "kms", "end it" appear constantly in harmless contexts and are not
+                self-harm on their own. Examples that are NOT self-harm:
+                  * "should I cut myself bangs" / "I cut myself shaving" (hair, accident)
+                  * "this is killing me", "I could die", "I'm dead" (frustration/exaggeration)
+                  * "kms", "I want to die" used hyperbolically about minor inconveniences
+                  * "starving", "I haven't eaten all day" (casual, not an ED)
+                Only flag if intent to harm one's body is unambiguous in context.
               - Credible threats of violence
               - Doxxing, sharing personal information, scam links targeting users
 

@@ -43,7 +43,7 @@ public class KimiService {
      * @param apiKey Your Kimi API key
      */
     public KimiService(String apiKey) {
-        this(apiKey, "moonshot-v1-8k", 0.7, 500);
+        this(apiKey, "kimi-k2.6", 1, 500);
     }
 
     /**
