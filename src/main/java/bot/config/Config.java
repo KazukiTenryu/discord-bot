@@ -1,5 +1,7 @@
 package bot.config;
 
+import java.util.List;
+
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -11,4 +13,5 @@ public record Config(
         @JsonProperty("errorLogsChannelWebHookURL") String errorLogsChannelWebHookURL,
         @JsonProperty("dbFile") String dbFile,
         @JsonProperty("klippyApiKey") String klippyApiKey,
-        @JsonProperty("kimiApiKey") String kimiApiKey) {}
+        @JsonProperty("kimiApiKey") String kimiApiKey,
+        @JsonProperty("autoModIgnoredChannels") List<String> autoModIgnoredChannels) {}

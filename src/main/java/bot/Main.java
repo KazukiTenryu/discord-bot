@@ -13,6 +13,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jspecify.annotations.NonNull;
 
+import bot.automod.AutoModeration;
 import bot.config.Config;
 import bot.config.ConfigLoader;
 import bot.database.Database;
@@ -39,6 +40,7 @@ public class Main {
             JDA jda = JDABuilder.createLight(config.botToken(), EnumSet.allOf(GatewayIntent.class))
                     .addEventListeners(new GlobalEventListener(config, database, slashCommandRepository))
                     .addEventListeners(new MessageReceivedListener(config))
+                    .addEventListeners(new AutoModeration(config))
                     .addEventListeners(new ListenerAdapter() {
                         private static final Logger LOGGER = LogManager.getLogger("Main#ReadyListener");
 

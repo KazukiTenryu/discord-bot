@@ -134,10 +134,14 @@ public class KimiService {
                     .uri(URI.create(KIMI_API_URL))
                     .header("Authorization", "Bearer " + apiKey)
                     .header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(30))
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                     .build();
 
+            long start = System.currentTimeMillis();
             HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            LOGGER.debug(
+                    "Kimi HTTP call took {} ms (status {})", System.currentTimeMillis() - start, response.statusCode());
 
             if (response.statusCode() != 200) {
                 Main.getMetrics()

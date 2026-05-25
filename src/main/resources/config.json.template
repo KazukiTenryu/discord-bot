@@ -5,5 +5,17 @@
     "errorLogsChannelWebHookURL": "",
     "dbFile": "bot.db",
     "klippyApiKey": "<your_api_key>",
-    "kimiApiKey": "<your_api_key>"
+    "kimiApiKey": "<your_api_key>",
+    "autoModIgnoredChannels": [
+            "admin-chat",
+            "admin-commands",
+            "logs",
+            "adults",
+            "chat-with-our-bot",
+            "info-logs",
+            "error-logs",
+            "rules",
+            "role-select",
+            "announcements"
+        ]
 }
