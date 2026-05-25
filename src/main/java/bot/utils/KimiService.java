@@ -27,7 +27,7 @@ import tools.jackson.databind.node.ObjectNode;
 public class KimiService {
     private static final Logger LOGGER = LogManager.getLogger(KimiService.class);
     private static final HttpClient HTTP_CLIENT =
-            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+            HttpClient.newBuilder().connectTimeout(Duration.ofMinutes(30)).build();
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private static final String KIMI_API_URL = "https://api.moonshot.ai/v1/chat/completions";
@@ -43,7 +43,7 @@ public class KimiService {
      * @param apiKey Your Kimi API key
      */
     public KimiService(String apiKey) {
-        this(apiKey, "kimi-k2.6", 1, 500);
+        this(apiKey, "kimi-k2.6", 1, 65536);
     }
 
     /**
@@ -134,13 +134,13 @@ public class KimiService {
                     .uri(URI.create(KIMI_API_URL))
                     .header("Authorization", "Bearer " + apiKey)
                     .header("Content-Type", "application/json")
-                    .timeout(Duration.ofSeconds(30))
+                    .timeout(Duration.ofMinutes(3))
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                     .build();
 
             long start = System.currentTimeMillis();
             HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
-            LOGGER.debug(
+            LOGGER.info(
                     "Kimi HTTP call took {} ms (status {})", System.currentTimeMillis() - start, response.statusCode());
 
             if (response.statusCode() != 200) {
@@ -245,6 +245,7 @@ public class KimiService {
                     choices.get(0).path("message").path("content").asText().trim();
 
             if (content.isEmpty()) {
+                LOGGER.warn("Kimi API returned empty content. Full response: {}", responseBody);
                 return Optional.empty();
             }
 

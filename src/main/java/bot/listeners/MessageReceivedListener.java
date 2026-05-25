@@ -10,6 +10,8 @@ import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jspecify.annotations.NonNull;
 
 import bot.Main;
@@ -17,6 +19,8 @@ import bot.config.Config;
 import bot.utils.KimiService;
 
 public class MessageReceivedListener extends ListenerAdapter {
+    private static final Logger LOGGER = LogManager.getLogger(MessageReceivedListener.class);
+
     private final KimiService kimiService;
     private final Map<Long, Deque<KimiService.Message>> channelHistories = new ConcurrentHashMap<>();
     private final Lock lock = new ReentrantLock();
@@ -62,15 +66,20 @@ public class MessageReceivedListener extends ListenerAdapter {
             return;
         }
 
-        if (event.getChannel().getIdLong() != 1490032285364519043L) {
-            return;
-        }
+//        if (event.getChannel().getIdLong() != 1490032285364519043L) {
+//            return;
+//        }
 
         if (!message.getMentions().isMentioned(event.getJDA().getSelfUser())) {
             return;
         }
 
         long channelId = event.getChannel().getIdLong();
+        LOGGER.info(
+                "Handling mention from {} in channel {}: {}",
+                event.getAuthor().getName(),
+                channelId,
+                message.getContentRaw());
 
         channelHistories.putIfAbsent(channelId, new ArrayDeque<>());
 
@@ -83,14 +92,21 @@ public class MessageReceivedListener extends ListenerAdapter {
         lock.lock();
         try {
             addMessage(history, userMessage);
-            snapshot = new ArrayList<>(history);
+            snapshot = new ArrayList<>();
             snapshot.add(SYSTEM_PROMPT);
             snapshot.addAll(history);
         } finally {
             lock.unlock();
         }
 
-        kimiService.chat(snapshot).ifPresent(response -> {
+        LOGGER.info("Calling Kimi with {} messages for channel {}", snapshot.size(), channelId);
+
+        Optional<String> result = kimiService.chat(snapshot);
+        if (result.isEmpty()) {
+            LOGGER.warn("Kimi returned no response for channel {}", channelId);
+            return;
+        }
+        result.ifPresent(response -> {
             KimiService.Message assistantMessage = new KimiService.Message("assistant", response);
 
             lock.lock();
