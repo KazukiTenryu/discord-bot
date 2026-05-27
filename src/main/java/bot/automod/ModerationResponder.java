@@ -24,7 +24,7 @@ public final class ModerationResponder {
         if (!verdict.requiresAction()) return;
 
         TextChannel sourceChannel = jda.getTextChannelById(sourceChannelId);
-        postInChannelReply(sourceChannel, verdict);
+        // postInChannelReply(sourceChannel, verdict);
 
         if (verdict.requiresHumanModerator()) {
             pageHumanModerators(jda, sourceChannel, verdict);

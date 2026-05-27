@@ -57,9 +57,7 @@ public class AutoModeration extends ListenerAdapter {
         this.jda = event.getJDA();
         long channelId = event.getChannel().getIdLong();
         BufferedMessage buffered = new BufferedMessage(
-                event.getAuthor().getAsMention(),
-                event.getAuthor().getEffectiveName(),
-                event.getMessage().getContentRaw());
+                event.getAuthor().getAsMention(), event.getMessage().getContentRaw());
 
         batcher.submit(channelId, buffered);
     }

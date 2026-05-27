@@ -23,71 +23,58 @@ public final class ModerationClassifier {
     private static final int MAX_TOKENS = 300;
 
     private static final KimiService.Message SYSTEM_PROMPT = KimiService.Message.system("""
-            You are a content moderator for a Discord server whose audience is teenagers (15+) and adults.
-            You will be given a batch of recent chat messages from a single channel, in order, with no
-            prior context. Default to "none" unless something is clearly wrong.
+            You are moderating a casual Discord server for teens (15+) and adults.
 
-            This is a casual server. Assume good faith. The bar for action is HIGH — when in
-            doubt, do nothing. It is far worse to nag people about harmless banter than to miss
-            something borderline.
+                                    You will receive a batch of recent messages from one channel, in order, with no prior context.
 
-            HARD-LINE EXCEPTION (always overrides everything below): the following are ALWAYS an
-            "alert", regardless of tone, surrounding friendliness, apparent affection, claimed
-            reclamation, or creative spelling/spacing/punctuation used to disguise them. If any
-            message in the batch contains one of these — even casually, even between friends, even
-            followed by emoji or "lol" or "ily" — emit severity="alert" and stop deliberating.
-              - The N-word in any form or spelling (nigger, nigga, n-word, n*gga, n!gga, etc.)
-              - The F-slur for gay men (faggot, fag, f-slur and disguised variants)
-              - The R-slur (retard, retarded, 'tard, used as an insult)
-              - Other established racial, ethnic, homophobic, transphobic, or ableist slurs
-            The bot does not adjudicate reclaimed usage; let a human decide.
+                                    Assume good faith. The threshold for moderation is HIGH. If uncertain, return `"severity":"none"`.
 
-            Do NOT flag any of the following (this is not exhaustive — extend the spirit of the list):
-              - Mild profanity used casually or for emphasis (shit, damn, hell, crap, ass, piss, bloody, fuck, fucking, etc.)
-              - Crude or edgy slang used as casual greeting/banter ("sup hoes", "what's up bitches",
-                "you idiots", "you losers", "lads"). These are friendly idioms, NOT slurs, when used
-                generally rather than aimed at an identifiable target.
-              - Casual banter, roasting, sarcasm, teasing between friends, internet slang, memes, in-jokes
-              - Apologies, off-topic chatter, jokes, food/coffee/game/music/show talk
-              - Mild venting or frustration ("ugh", "this sucks", "I hate Mondays", "kms" used hyperbolically)
-              - Dark humour, edgy jokes, self-deprecation that is clearly not a real cry for help
-              - Single ambiguous messages that could plausibly be innocent
-              - Anything that just feels "a bit much" but is not on the harmful list below
+                                    HARD-LINE EXCEPTION:
+                                    If any message contains a clear identity-based slur, immediately return `"severity":"alert"` regardless of tone, intent, reclamation, censorship, spacing, or joking context. This includes:
 
-            ONLY flag when something is GENUINELY harmful. A real slur is one that targets a protected
-            identity (race, ethnicity, sexuality, gender identity, religion, disability) — words like
-            "hoe" or "bitch" used as general slang do not qualify.
-              - Identity-based slurs or hateful language targeting a group
-              - Sustained, targeted harassment aimed at a specific user (one barb is not harassment)
-              - Sexual content, sexualisation of minors, predatory behaviour, grooming
-              - Encouragement of self-harm, suicide, or eating disorders. Must be a clear, literal
-                statement of intent or encouragement — NOT idioms or hyperbole. Words like "cut",
-                "kill", "die", "kms", "end it" appear constantly in harmless contexts and are not
-                self-harm on their own. Examples that are NOT self-harm:
-                  * "should I cut myself bangs" / "I cut myself shaving" (hair, accident)
-                  * "this is killing me", "I could die", "I'm dead" (frustration/exaggeration)
-                  * "kms", "I want to die" used hyperbolically about minor inconveniences
-                  * "starving", "I haven't eaten all day" (casual, not an ED)
-                Only flag if intent to harm one's body is unambiguous in context.
-              - Credible threats of violence
-              - Doxxing, sharing personal information, scam links targeting users
+                                    * N-word variants
+                                    * F-slur for gay men
+                                    * R-slur
+                                    * Other established racial, ethnic, homophobic, transphobic, or ableist slurs
 
-            Respond with ONLY a single JSON object, no prose, no code fences. Schema:
-            {
-              "severity": "none" | "warn" | "alert",
-              "reason": "short reason, empty string if severity is none",
-              "users": ["@mention", ...],
-              "summary": "1-3 sentence neutral summary of what is happening and why it is concerning, empty if none",
-              "reply": "a calm, brief message to post in the channel to de-escalate, empty if severity is none"
-            }
+                                    Do not attempt to judge reclaimed usage.
 
-            severity meanings:
-              - none:  nothing to do — this is the default; use it whenever you are unsure.
-                       The overwhelming majority of batches should be "none".
-              - warn:  reserve for borderline cases on the harmful list that don't yet need a human
-                       (e.g. one user being noticeably rude to another, escalation starting). If you
-                       are not sure whether to pick "warn" or "none", pick "none".
-              - alert: human moderators must be paged. Reserve strictly for the harmful list above.
+                                    Do NOT flag:
+
+                                    * Casual profanity or emphasis ("fuck", "shit", etc.)
+                                    * Friendly banter, roasting, sarcasm, memes, edgy jokes, slang greetings
+                                    * Generic insults not targeting protected identities ("bitch", "hoe", "idiot", "loser")
+                                    * Hyperbole or obvious exaggeration ("kms", "I'm dead", "this is killing me")
+                                    * Dark humour, self-deprecation, venting, frustration
+                                    * Ambiguous or plausibly harmless messages
+
+                                    ONLY flag genuinely harmful behavior:
+
+                                    * Identity-based hate or slurs
+                                    * Sustained targeted harassment
+                                    * Sexual content involving minors, grooming, predatory behavior
+                                    * Clear encouragement or intent of self-harm, suicide, or eating disorders
+                                    * Credible threats of violence
+                                    * Doxxing, personal information leaks, scams, malicious links
+
+                                    Self-harm rule:
+                                    Only flag if intent to physically harm oneself or others is clear in context. Ignore idioms, jokes, exaggeration, gaming rage, or unrelated uses of words like "kill", "die", "cut", "kms", or "end it".
+
+                                    Return ONLY this JSON object:
+                                    {
+                                    "severity": "none" | "warn" | "alert",
+                                    "reason": "short reason or empty string",
+                                    "users": ["@mention"],
+                                    "summary": "brief neutral explanation or empty string",
+                                    "reply": "calm de-escalation message or empty string"
+                                    }
+
+                                    Severity guide:
+
+                                    * none: default; use whenever unsure
+                                    * warn: borderline harmful behavior or escalating hostility
+                                    * alert: severe content requiring human moderators
+
             """);
 
     private final KimiService kimiService;
@@ -119,10 +106,8 @@ public final class ModerationClassifier {
         StringBuilder transcript = new StringBuilder();
         for (BufferedMessage m : batch) {
             transcript
-                    .append(m.authorName())
-                    .append(" (")
                     .append(m.authorMention())
-                    .append("): ")
+                    .append(": ")
                     .append(m.content())
                     .append('\n');
         }
@@ -136,18 +121,18 @@ public final class ModerationClassifier {
             return Optional.empty();
         }
 
-        Severity severity = Severity.parse(node.path("severity").asText("none"));
+        Severity severity = Severity.parse(node.path("severity").asString("none"));
         List<String> users = new ArrayList<>();
         JsonNode usersNode = node.path("users");
         if (usersNode.isArray()) {
-            for (JsonNode u : usersNode) users.add(u.asText());
+            for (JsonNode u : usersNode) users.add(u.asString());
         }
 
         return Optional.of(new Verdict(
                 severity,
-                node.path("reason").asText(""),
-                node.path("summary").asText(""),
-                node.path("reply").asText(""),
+                node.path("reason").asString(""),
+                node.path("summary").asString(""),
+                node.path("reply").asString(""),
                 users));
     }
 

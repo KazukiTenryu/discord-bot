@@ -66,9 +66,9 @@ public class MessageReceivedListener extends ListenerAdapter {
             return;
         }
 
-//        if (event.getChannel().getIdLong() != 1490032285364519043L) {
-//            return;
-//        }
+        if (event.getChannel().getIdLong() != 1490032285364519043L) {
+            return;
+        }
 
         if (!message.getMentions().isMentioned(event.getJDA().getSelfUser())) {
             return;
