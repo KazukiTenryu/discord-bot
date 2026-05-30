@@ -14,4 +14,5 @@ public record Config(
         @JsonProperty("dbFile") String dbFile,
         @JsonProperty("klippyApiKey") String klippyApiKey,
         @JsonProperty("kimiApiKey") String kimiApiKey,
+        @JsonProperty("openAiApiKey") String openAiApiKey,
         @JsonProperty("autoModIgnoredChannels") List<String> autoModIgnoredChannels) {}

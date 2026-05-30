@@ -120,9 +120,26 @@ public class KimiService {
      * @return Optional containing the AI response, or empty if the request failed
      */
     public Optional<String> chat(List<Message> messages, String model, double temperature, int maxTokens) {
+        return chatDetailed(messages, model, temperature, maxTokens).content();
+    }
+
+    /**
+     * Send a chat completion using the default settings and return the detailed outcome, including
+     * the HTTP status and error body. Use this when the caller needs to distinguish failure modes
+     * (e.g. Moonshot's content risk-control rejection) rather than just success/empty.
+     */
+    public ChatOutcome chatDetailed(List<Message> messages) {
+        return chatDetailed(messages, defaultModel, defaultTemperature, defaultMaxTokens);
+    }
+
+    /**
+     * Send a chat completion and return the detailed outcome, including the HTTP status and error
+     * body so callers can react to specific failures such as the high-risk content rejection.
+     */
+    public ChatOutcome chatDetailed(List<Message> messages, String model, double temperature, int maxTokens) {
         if (!isConfigured()) {
             LOGGER.warn("Kimi API key not configured, cannot make request");
-            return Optional.empty();
+            return new ChatOutcome(Optional.empty(), -1, null);
         }
 
         try {
@@ -148,14 +165,17 @@ public class KimiService {
                         .count("ai_request_fail", Map.of("model", "kimi", "statusCode", response.statusCode()));
 
                 LOGGER.error("Kimi API returned status {}: {}", response.statusCode(), response.body());
-                return Optional.empty();
+                return new ChatOutcome(Optional.empty(), response.statusCode(), response.body());
             }
 
-            return parseResponse(response.body());
+            return new ChatOutcome(parseResponse(response.body()), response.statusCode(), null);
 
         } catch (IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             LOGGER.error("Failed to call Kimi API", e);
-            return Optional.empty();
+            return new ChatOutcome(Optional.empty(), -1, null);
         }
     }
 
@@ -301,6 +321,30 @@ public class KimiService {
         }
         messages.add(new Message("user", userPrompt));
         return messages;
+    }
+
+    /**
+     * The detailed outcome of a chat completion request.
+     *
+     * @param content the response text, or empty if the request failed
+     * @param statusCode the HTTP status code (-1 if the request never reached the server)
+     * @param errorBody the raw error body when the request failed, otherwise null
+     */
+    public record ChatOutcome(Optional<String> content, int statusCode, String errorBody) {
+        /** Whether the request succeeded and returned usable content. */
+        public boolean isSuccess() {
+            return content.isPresent();
+        }
+
+        /**
+         * Whether Moonshot's content risk-control filter rejected the request as high risk. This is
+         * itself a strong signal that the evaluated content is unsafe.
+         */
+        public boolean rejectedHighRisk() {
+            return statusCode == 400
+                    && errorBody != null
+                    && errorBody.toLowerCase().contains("high risk");
+        }
     }
 
     /**

@@ -8,7 +8,7 @@ import java.util.Map;
 import net.dv8tion.jda.api.entities.Message;
 
 public class ChannelHistory {
-    private static final int WORKING_AMOUNT = 20;
+    private static final int WORKING_AMOUNT = 10;
     private final Map<String, List<Message>> channelMessages;
 
     public ChannelHistory() {

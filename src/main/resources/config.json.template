@@ -6,6 +6,7 @@
     "dbFile": "bot.db",
     "klippyApiKey": "<your_api_key>",
     "kimiApiKey": "<your_api_key>",
+    "openAiApiKey": "<your_api_key>",
     "autoModIgnoredChannels": [
             "admin-chat",
             "admin-commands",
