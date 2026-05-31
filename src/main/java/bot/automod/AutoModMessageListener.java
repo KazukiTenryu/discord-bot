@@ -53,9 +53,9 @@ public class AutoModMessageListener extends ListenerAdapter implements Runnable 
             return;
         }
 
-        if (!queue.offer(event.getMessage())) {
-            LOGGER.warn("Automod queue full ({}); dropping message {}", QUEUE_CAPACITY, event.getMessageId());
-        }
+//        if (!queue.offer(event.getMessage())) {
+//            LOGGER.warn("Automod queue full ({}); dropping message {}", QUEUE_CAPACITY, event.getMessageId());
+//        }
     }
 
     public void run() {
