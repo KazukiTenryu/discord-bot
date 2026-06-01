@@ -1,9 +1,9 @@
 version: '3.8'
 
 services:
-  discord-bot:
+  velvet-bot:
     build: .
-    container_name: discord-bot
+    container_name: velvet-bot
     restart: unless-stopped
     volumes:
       - ./config.json:/app/config.json:ro
