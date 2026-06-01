@@ -5,8 +5,9 @@ WORKDIR /app
 COPY build.gradle gradlew ./
 COPY gradle/ gradle/
 COPY src/ src/
-COPY build/generated-src build/generated-src
 
+# shadowJar runs migrateDb -> generateJooq -> compileJava, so the jOOQ sources are
+# generated here from the migrations; they are not committed to the repo.
 RUN ./gradlew shadowJar
 
 FROM eclipse-temurin:25-jdk-alpine

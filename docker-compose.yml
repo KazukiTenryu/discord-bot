@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   velvet-bot:
     build: .
@@ -7,7 +5,9 @@ services:
     restart: unless-stopped
     volumes:
       - ./config.json:/app/config.json:ro
-      - ./bot.db:/app/bot.db
+      # Writable, botuser-owned volume holding bot.db plus its WAL/-shm sidecar
+      # files. DB_FILE=/app/data/bot.db (set in the Dockerfile) points the app here.
+      - bot-data:/app/data
 
 volumes:
   bot-data:

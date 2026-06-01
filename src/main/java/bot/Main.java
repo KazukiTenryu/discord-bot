@@ -33,7 +33,13 @@ public class Main {
             System.setProperty("infoLogsChannelWebHookURL", config.infoLogsChannelWebHookURL());
             System.setProperty("errorLogsChannelWebHookURL", config.errorLogsChannelWebHookURL());
 
-            Database database = new Database("jdbc:sqlite:" + config.dbFile());
+            // DB_FILE env var (set by the Docker image to a writable volume path) overrides the
+            // config.json value, which stays as a sensible default for local development.
+            String dbFile = System.getenv("DB_FILE");
+            if (dbFile == null || dbFile.isBlank()) {
+                dbFile = config.dbFile();
+            }
+            Database database = new Database("jdbc:sqlite:" + dbFile);
             metricService = new MetricService(database);
 
             SlashCommandRepository slashCommandRepository = new SlashCommandRepository(config, database);
