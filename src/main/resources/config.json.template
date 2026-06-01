@@ -7,6 +7,7 @@
     "klippyApiKey": "<your_api_key>",
     "kimiApiKey": "<your_api_key>",
     "openAiApiKey": "<your_api_key>",
+    "youtubeOauthRefreshToken": "",
     "autoModIgnoredChannels": [
             "admin-chat",
             "admin-commands",

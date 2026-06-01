@@ -15,4 +15,5 @@ public record Config(
         @JsonProperty("klippyApiKey") String klippyApiKey,
         @JsonProperty("kimiApiKey") String kimiApiKey,
         @JsonProperty("openAiApiKey") String openAiApiKey,
+        @JsonProperty("youtubeOauthRefreshToken") String youtubeOauthRefreshToken,
         @JsonProperty("autoModIgnoredChannels") List<String> autoModIgnoredChannels) {}
