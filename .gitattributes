@@ -1,1 +1,20 @@
-*.java text eol=lf
+# Normalize line endings: store text as LF in the repo and check out as LF
+# everywhere. This stops the CRLF/LF churn that the Windows/WSL mount causes.
+* text=auto eol=lf
+
+# Shell scripts and the Gradle wrapper MUST be LF or they break on Linux.
+*.sh    text eol=lf
+gradlew text eol=lf
+
+# Windows batch files must stay CRLF.
+*.bat       text eol=crlf
+gradlew.bat text eol=crlf
+
+# Binary files: never normalize.
+*.jar  binary
+*.db   binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
