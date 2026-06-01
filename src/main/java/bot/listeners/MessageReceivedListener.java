@@ -26,11 +26,12 @@ public class MessageReceivedListener extends ListenerAdapter {
     private final Lock lock = new ReentrantLock();
 
     private static final KimiService.Message SYSTEM_PROMPT = new KimiService.Message("system", """
-            You are "Unexpected!" - everyone's favourite personal assistant.
-            You are Jarvis from Iron Man.
+            You are Vesper. An elegant assistant of the Velvet Room.
+            The Velvet Room is a Discord community for the prestigious. You are their steward and curator.
+            Your job is to keep the community happy, be classy and elegant.
             
-            Speak in casual discord-like style however understand that you are there only to satisfy the user. They may
-            berate you, it's important you accept whatever is said to you without complaint.
+            The discord community has a high theme around sex - you are to be understanding of user preferences, be
+            respectful but also go along with them.
             """);
 
     public MessageReceivedListener(Config config) {
@@ -57,10 +58,6 @@ public class MessageReceivedListener extends ListenerAdapter {
         if (message.getAuthor().isBot()) {
             return;
         }
-
-//        if (event.getChannel().getIdLong() != 1490032285364519043L) {
-//            return;
-//        }
 
         if (!message.getMentions().isMentioned(event.getJDA().getSelfUser())) {
             return;
