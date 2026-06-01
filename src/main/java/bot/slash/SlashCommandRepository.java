@@ -7,6 +7,14 @@ import bot.config.Config;
 import bot.database.Database;
 import bot.slash.echo.EchoCommand;
 import bot.slash.echo.EchoFromCommand;
+import bot.slash.family.AdoptCommand;
+import bot.slash.family.ClaimCommand;
+import bot.slash.family.DivorceCommand;
+import bot.slash.family.EmancipateCommand;
+import bot.slash.family.FamilyTreeCommand;
+import bot.slash.family.MarryCommand;
+import bot.slash.family.ReleaseCommand;
+import bot.slash.family.RelationshipService;
 import bot.slash.gif.GifCommand;
 import bot.slash.kissorslap.KissOrSlapCommand;
 import bot.slash.moderation.*;
@@ -45,6 +53,15 @@ public class SlashCommandRepository {
         commands.add(new KissOrSlapCommand());
         commands.add(new EchoCommand());
         commands.add(new EchoFromCommand());
+
+        RelationshipService relationshipService = new RelationshipService(database);
+        commands.add(new MarryCommand(relationshipService));
+        commands.add(new DivorceCommand(relationshipService));
+        commands.add(new AdoptCommand(relationshipService));
+        commands.add(new ClaimCommand(relationshipService));
+        commands.add(new EmancipateCommand(relationshipService));
+        commands.add(new ReleaseCommand(relationshipService));
+        commands.add(new FamilyTreeCommand(relationshipService));
 
         AuditService auditService = new AuditService(database);
         commands.add(new NoteCommand(auditService));
