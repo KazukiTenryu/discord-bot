@@ -20,7 +20,9 @@ public class EmancipateCommand extends SlashCommand {
     public EmancipateCommand(RelationshipService service) {
         super("emancipate", "Dissolve a parent/child bond with someone");
         this.service = service;
-        getData().addOptions(new OptionData(OptionType.USER, USER_OPTION, "the parent or child to part ways with", true));
+        getData()
+                .addOptions(
+                        new OptionData(OptionType.USER, USER_OPTION, "the parent or child to part ways with", true));
     }
 
     @Override
@@ -48,8 +50,7 @@ public class EmancipateCommand extends SlashCommand {
             return;
         }
 
-        event.reply("👋 " + event.getUser().getAsMention() + " and " + target.getAsMention()
-                        + " are no longer family.")
+        event.reply("👋 " + event.getUser().getAsMention() + " and " + target.getAsMention() + " are no longer family.")
                 .queue();
     }
 }

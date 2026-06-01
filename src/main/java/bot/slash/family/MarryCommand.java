@@ -12,7 +12,7 @@ public class MarryCommand extends AbstractProposalCommand {
 
     @Override
     protected String proposalText(String proposerId, String targetId) {
-        return "💍 <@" + proposerId + "> wants to **marry** <@" + targetId + ">!\n\n"
-                + "<@" + targetId + ">, do you accept?";
+        return "💍 <@" + proposerId + "> wants to **marry** <@" + targetId + ">!\n\n" + "<@" + targetId
+                + ">, do you accept?";
     }
 }

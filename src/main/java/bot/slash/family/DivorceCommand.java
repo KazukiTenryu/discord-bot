@@ -30,14 +30,11 @@ public class DivorceCommand extends SlashCommand {
         Optional<String> exSpouse = service.divorce(guildId, event.getUser().getId());
 
         if (exSpouse.isEmpty()) {
-            event.reply("You're not married to anyone here.")
-                    .setEphemeral(true)
-                    .queue();
+            event.reply("You're not married to anyone here.").setEphemeral(true).queue();
             return;
         }
 
-        event.reply("💔 " + event.getUser().getAsMention() + " and <@" + exSpouse.get()
-                        + "> are no longer married.")
+        event.reply("💔 " + event.getUser().getAsMention() + " and <@" + exSpouse.get() + "> are no longer married.")
                 .queue();
     }
 }

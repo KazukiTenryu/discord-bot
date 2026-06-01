@@ -48,8 +48,9 @@ public class RelationshipService {
     // ---------------------------------------------------------------- queries
 
     public List<RelationshipsRecord> allForGuild(String guildId) {
-        return database.read(ctx ->
-                ctx.selectFrom(RELATIONSHIPS).where(RELATIONSHIPS.GUILD_ID.eq(guildId)).fetch());
+        return database.read(ctx -> ctx.selectFrom(RELATIONSHIPS)
+                .where(RELATIONSHIPS.GUILD_ID.eq(guildId))
+                .fetch());
     }
 
     public Optional<String> spouseOf(String guildId, String userId) {
@@ -130,17 +131,18 @@ public class RelationshipService {
                     yield fail(m(targetId) + " already has two parents.");
                 }
                 if (isAncestor(guildId, targetId, proposerId)) {
-                    yield fail("🌀 That would loop the family tree — " + m(targetId)
-                            + " is already an ancestor of " + m(proposerId) + ".");
+                    yield fail("🌀 That would loop the family tree — " + m(targetId) + " is already an ancestor of "
+                            + m(proposerId) + ".");
                 }
                 yield ok();
             }
             case OWNER -> {
                 Optional<String> existingOwner = ownerOf(guildId, targetId);
                 if (existingOwner.isPresent()) {
-                    yield fail(existingOwner.get().equals(proposerId)
-                            ? "🔗 " + m(targetId) + " already belongs to you."
-                            : "🔗 " + m(targetId) + " already belongs to " + m(existingOwner.get()) + ".");
+                    yield fail(
+                            existingOwner.get().equals(proposerId)
+                                    ? "🔗 " + m(targetId) + " already belongs to you."
+                                    : "🔗 " + m(targetId) + " already belongs to " + m(existingOwner.get()) + ".");
                 }
                 yield ok();
             }
@@ -163,8 +165,7 @@ public class RelationshipService {
             }
             case PARENT -> {
                 insert(guildId, PARENT, proposerId, targetId);
-                yield new Outcome(
-                        true, "🍼 " + m(proposerId) + " adopted " + m(targetId) + "! Welcome to the family.");
+                yield new Outcome(true, "🍼 " + m(proposerId) + " adopted " + m(targetId) + "! Welcome to the family.");
             }
             case OWNER -> {
                 insert(guildId, OWNER, proposerId, targetId);

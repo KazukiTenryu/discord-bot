@@ -127,7 +127,8 @@ public class FamilyTreeCommand extends SlashCommand {
             StringBuilder tree = new StringBuilder("```\n");
             Set<String> drawn = new HashSet<>();
             int[] count = {0};
-            tree.append(label(finalRoot, names, spouse, owns, ownedBy, targetId)).append('\n');
+            tree.append(label(finalRoot, names, spouse, owns, ownedBy, targetId))
+                    .append('\n');
             renderChildren(finalRoot, "", tree, drawn, count, children, names, spouse, owns, ownedBy, targetId);
             if (count[0] >= MAX_NODES) {
                 tree.append("… (tree truncated)\n");

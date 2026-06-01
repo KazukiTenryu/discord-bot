@@ -12,7 +12,7 @@ public class ClaimCommand extends AbstractProposalCommand {
 
     @Override
     protected String proposalText(String proposerId, String targetId) {
-        return "🔗 <@" + proposerId + "> wants to **claim** <@" + targetId + "> as theirs.\n\n"
-                + "<@" + targetId + ">, do you consent? Nothing happens unless you say yes.";
+        return "🔗 <@" + proposerId + "> wants to **claim** <@" + targetId + "> as theirs.\n\n" + "<@" + targetId
+                + ">, do you consent? Nothing happens unless you say yes.";
     }
 }

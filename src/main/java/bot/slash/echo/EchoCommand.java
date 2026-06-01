@@ -23,8 +23,7 @@ public class EchoCommand extends SlashCommand {
     public EchoCommand() {
         super("echo", "Make the bot repeat a message as plain text or an embed");
 
-        OptionData message =
-                new OptionData(OptionType.STRING, MESSAGE_OPTION, "the text for the bot to send", true);
+        OptionData message = new OptionData(OptionType.STRING, MESSAGE_OPTION, "the text for the bot to send", true);
         OptionData embed = new OptionData(
                 OptionType.BOOLEAN, EMBED_OPTION, "send as an embed instead of plain text (default: false)", false);
 
@@ -33,8 +32,7 @@ public class EchoCommand extends SlashCommand {
 
     @Override
     public void handle(SlashCommandInteractionEvent event) {
-        String message =
-                Objects.requireNonNull(event.getOption(MESSAGE_OPTION)).getAsString();
+        String message = Objects.requireNonNull(event.getOption(MESSAGE_OPTION)).getAsString();
         boolean asEmbed = event.getOption(EMBED_OPTION) != null
                 && Objects.requireNonNull(event.getOption(EMBED_OPTION)).getAsBoolean();
 

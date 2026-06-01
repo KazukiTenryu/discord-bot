@@ -19,12 +19,8 @@ public class RulesCommand extends SlashCommand {
 
     @Override
     public void handle(SlashCommandInteractionEvent event) {
-        event.replyEmbeds(
-            banner(),
-            conduct(),
-            consent(),
-            privacyAndEnforcement()
-        ).queue();
+        event.replyEmbeds(banner(), conduct(), consent(), privacyAndEnforcement())
+                .queue();
     }
 
     private MessageEmbed banner() {

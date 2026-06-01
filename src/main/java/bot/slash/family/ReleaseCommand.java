@@ -20,7 +20,8 @@ public class ReleaseCommand extends SlashCommand {
     public ReleaseCommand(RelationshipService service) {
         super("release", "End an ownership bond with someone");
         this.service = service;
-        getData().addOptions(new OptionData(OptionType.USER, USER_OPTION, "the owner or owned person to release", true));
+        getData()
+                .addOptions(new OptionData(OptionType.USER, USER_OPTION, "the owner or owned person to release", true));
     }
 
     @Override
@@ -48,8 +49,7 @@ public class ReleaseCommand extends SlashCommand {
             return;
         }
 
-        event.reply("🔓 " + event.getUser().getAsMention() + " and " + target.getAsMention()
-                        + " are no longer bound.")
+        event.reply("🔓 " + event.getUser().getAsMention() + " and " + target.getAsMention() + " are no longer bound.")
                 .queue();
     }
 }

@@ -12,7 +12,7 @@ public class AdoptCommand extends AbstractProposalCommand {
 
     @Override
     protected String proposalText(String proposerId, String targetId) {
-        return "🍼 <@" + proposerId + "> wants to **adopt** <@" + targetId + ">!\n\n"
-                + "<@" + targetId + ">, will you join the family?";
+        return "🍼 <@" + proposerId + "> wants to **adopt** <@" + targetId + ">!\n\n" + "<@" + targetId
+                + ">, will you join the family?";
     }
 }
