@@ -1,1 +1,6 @@
 *.java text eol=lf
+
+# The Gradle wrapper and shell scripts must stay LF — CRLF breaks execution in
+# the Alpine Docker image (/bin/sh can't run a "#!/bin/sh\r" shebang).
+gradlew text eol=lf
+*.sh text eol=lf
