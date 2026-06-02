@@ -18,6 +18,7 @@ import bot.slash.family.ReleaseCommand;
 import bot.slash.gif.GifCommand;
 import bot.slash.kissorslap.KissOrSlapCommand;
 import bot.slash.moderation.*;
+import bot.slash.music.LyricsCommand;
 import bot.slash.music.NowPlayingCommand;
 import bot.slash.music.PauseCommand;
 import bot.slash.music.PlayCommand;
@@ -85,6 +86,7 @@ public class SlashCommandRepository {
         commands.add(new ResumeCommand());
         commands.add(new QueueCommand());
         commands.add(new NowPlayingCommand());
+        commands.add(new LyricsCommand());
 
         commands.addAll(ActionCommand.registerActionCommands(new HandleCommandAction(config)));
     }
