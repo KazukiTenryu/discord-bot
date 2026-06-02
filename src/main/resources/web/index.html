@@ -47,30 +47,44 @@
   header h1, header .sub { transition: opacity .2s ease; }
   header.clear { background: transparent; backdrop-filter: none; }
   header.clear h1, header.clear .sub { opacity: 0; }
-  header .back {
+  header .back, .header-search {
     border: 0; background: var(--bg-card); color: var(--text);
-    width: 38px; height: 38px; border-radius: 50%; font-size: 22px;
-    cursor: pointer; display: none; align-items: center; justify-content: center; flex: 0 0 auto;
+    width: 38px; height: 38px; border-radius: 50%;
+    cursor: pointer; display: none; place-items: center; flex: 0 0 auto;
     transition: transform .12s var(--ease), background .12s ease;
   }
-  header .back:active { transform: scale(.9); background: var(--bg-elev); }
-  header.has-back .back { display: inline-flex; }
+  header .back svg, .header-search svg { width: 22px; height: 22px; fill: currentColor; }
+  header .back:active, .header-search:active { transform: scale(.9); background: var(--bg-elev); }
+  .header-search:hover { background: var(--bg-elev); }
+  header.has-back .back { display: grid; }
+  .header-search { margin-left: auto; }
+  body.authed .header-search { display: grid; }
   header h1 { font-size: 22px; font-weight: 800; margin: 0; letter-spacing: -0.02em; }
   header .sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
 
   main { padding: 4px clamp(16px, 4vw, 32px) 28px; }
 
-  /* search bar — shown once a valid token is loaded */
-  .searchbar { display: none; padding: 2px clamp(16px, 4vw, 32px) 10px; }
-  body.authed .searchbar { display: block; }
-  .searchbar input {
-    width: 100%; display: block;
-    background: var(--bg-card); border: 1px solid var(--line); color: var(--text);
-    border-radius: 999px; padding: 12px 18px; font-size: 15px; outline: none;
+  /* search modal — opened from the header search icon (authed only) */
+  .modal {
+    position: fixed; inset: 0; z-index: 90;
+    background: rgba(6,6,10,0.72); backdrop-filter: blur(8px);
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 20vh 22px 22px;
+    opacity: 0; visibility: hidden; transition: opacity .2s ease;
+  }
+  .modal.open { opacity: 1; visibility: visible; }
+  .modal-card { width: 100%; max-width: 560px; transform: translateY(-12px) scale(.98); transition: transform .22s var(--ease); }
+  .modal.open .modal-card { transform: none; }
+  .modal-card .field { position: relative; }
+  .modal-card .field svg { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; fill: var(--muted); pointer-events: none; }
+  .modal-card input {
+    width: 100%; background: var(--bg-card); border: 1px solid var(--line); color: var(--text);
+    border-radius: 14px; padding: 17px 20px 17px 50px; font-size: 18px; outline: none;
     -webkit-appearance: none; appearance: none; transition: border-color .15s ease;
   }
-  .searchbar input::placeholder { color: var(--muted); }
-  .searchbar input:focus { border-color: var(--accent); }
+  .modal-card input::placeholder { color: var(--muted); }
+  .modal-card input:focus { border-color: var(--accent); }
+  .modal-hint { text-align: center; color: var(--muted); font-size: 12.5px; margin-top: 14px; }
 
   /* user grid */
   .users { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
@@ -134,6 +148,12 @@
     .banner-stats, .banner-actions { justify-content: center; }
     .banner-meta h1.bn { margin: 12px 0; }
   }
+
+  /* search results — centered column */
+  .search-results { max-width: 720px; margin: 0 auto; }
+  .search-head { font-size: 22px; font-weight: 800; letter-spacing: -.02em; margin: 8px 4px 4px; }
+  .search-sub { font-size: 13px; color: var(--muted); margin: 0 4px 16px; }
+  .search-state { max-width: 720px; margin: 0 auto; }
 
   /* track list */
   .section-title { font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin: 6px 4px 10px; }
@@ -326,7 +346,7 @@
     body.np-open { overflow: auto; }
 
     .np {
-      inset: auto 0 0 0; height: 96px;
+      inset: auto 0 0 0; height: 100px;
       display: grid;
       grid-template-columns: minmax(200px, 1fr) minmax(420px, 2.2fr) minmax(200px, 1fr);
       align-items: center; gap: 20px;
@@ -335,7 +355,7 @@
       transform: translateY(120%);                 /* hidden until a track loads */
       transition: transform .35s var(--ease);
     }
-    body.has-track { padding-bottom: calc(96px + 28px + env(safe-area-inset-bottom)); }
+    body.has-track { padding-bottom: calc(100px + 28px + env(safe-area-inset-bottom)); }
     body.has-track .np { transform: none; }
     .np-bg, .np::after, .np-top { display: none !important; }
 
@@ -365,13 +385,13 @@
 
     /* lyrics — right-hand sidebar instead of a full-screen sheet */
     .lyrics {
-      position: fixed; inset: 0 0 96px auto; left: auto; width: 360px;
+      position: fixed; inset: 0 0 100px auto; left: auto; width: 360px;
       border-left: 1px solid var(--line); z-index: 45;
       transform: translateX(102%);
     }
     .lyrics.open { transform: translateX(0); }
 
-    .toast { bottom: calc(96px + 22px + env(safe-area-inset-bottom)) !important; }
+    .toast { bottom: calc(100px + 22px + env(safe-area-inset-bottom)) !important; }
   }
 
   .toast {
@@ -387,21 +407,31 @@
 </head>
 <body>
   <header id="header">
-    <button class="back" id="back" aria-label="Back">‹</button>
+    <button class="back" id="back" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15.5 4.5 8 12l7.5 7.5L14 21l-9-9 9-9z"/></svg></button>
     <div style="min-width:0">
       <h1 id="title">Playlists</h1>
       <div class="sub" id="subtitle">Pick someone to start listening</div>
     </div>
+    <button class="header-search" id="searchOpen" aria-label="Search">
+      <svg viewBox="0 0 24 24"><path d="M10 4a6 6 0 0 1 4.6 9.85l5.27 5.28-1.42 1.41-5.27-5.27A6 6 0 1 1 10 4zm0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
+    </button>
   </header>
-
-  <div class="searchbar">
-    <input id="q" type="search" inputmode="search" enterkeyhint="search" autocomplete="off"
-           placeholder="Search songs to add to your playlist…" />
-  </div>
 
   <main id="view"><div class="loading">Loading…</div></main>
 
   <div class="toast" id="toast"></div>
+
+  <!-- search modal -->
+  <div class="modal" id="searchModal">
+    <div class="modal-card">
+      <div class="field">
+        <svg viewBox="0 0 24 24"><path d="M10 4a6 6 0 0 1 4.6 9.85l5.27 5.28-1.42 1.41-5.27-5.27A6 6 0 1 1 10 4zm0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
+        <input id="q" type="search" inputmode="search" enterkeyhint="search" autocomplete="off"
+               placeholder="What do you want to listen to?" />
+      </div>
+      <div class="modal-hint">Press Enter to search · Esc to close</div>
+    </div>
+  </div>
 
   <!-- mini player -->
   <div class="mini" id="mini">
@@ -488,6 +518,7 @@
   const audio = $("audio");
   const view = $("view"), header = $("header"), titleEl = $("title"), subtitleEl = $("subtitle");
   const toastEl = $("toast"), qInput = $("q");
+  const searchModal = $("searchModal"), searchOpen = $("searchOpen");
 
   // mini player
   const mini = $("mini"), miniBar = $("miniBar"), miniOpen = $("miniOpen");
@@ -750,11 +781,21 @@
   async function showSearch(query) {
     titleEl.textContent = "Search";
     subtitleEl.textContent = "“" + query + "”";
-    view.innerHTML = '<div class="loading">Searching…</div>'; updateHeaderScroll();
+    view.innerHTML = '<div class="search-state loading">Searching…</div>'; updateHeaderScroll();
     let results;
     try { results = await getJSON("/api/search?q=" + encodeURIComponent(query)); }
-    catch (e) { view.innerHTML = '<div class="empty">Search failed — try again.</div>'; return; }
-    if (!results.length) { view.innerHTML = '<div class="empty">No results for “' + query + '”.</div>'; return; }
+    catch (e) { view.innerHTML = '<div class="search-state empty">Search failed — try again.</div>'; updateHeaderScroll(); return; }
+    if (!results.length) { view.innerHTML = '<div class="search-state empty">No results for “' + query + '”.</div>'; updateHeaderScroll(); return; }
+
+    const wrap = document.createElement("div");
+    wrap.className = "search-results";
+    const head = document.createElement("div");
+    head.className = "search-head"; head.textContent = "Search results";
+    const sub = document.createElement("div");
+    sub.className = "search-sub";
+    sub.textContent = results.length + " result" + (results.length === 1 ? "" : "s") + " for “" + query + "”";
+    wrap.appendChild(head); wrap.appendChild(sub);
+
     const list = document.createElement("div");
     list.className = "tracks";
     results.forEach((t) => {
@@ -767,7 +808,8 @@
       row.appendChild(btn);
       list.appendChild(row);
     });
-    view.innerHTML = ""; view.appendChild(list); updateHeaderScroll();
+    wrap.appendChild(list);
+    view.innerHTML = ""; view.appendChild(wrap); updateHeaderScroll();
   }
 
   async function addUri(uri, title) {
@@ -848,11 +890,17 @@
     } catch (e) { toast("Couldn’t remove that one."); }
   }
 
+  function openSearchModal() { searchModal.classList.add("open"); setTimeout(() => { qInput.focus(); qInput.select(); }, 60); }
+  function closeSearchModal() { searchModal.classList.remove("open"); qInput.blur(); }
+  searchOpen.addEventListener("click", openSearchModal);
+  searchModal.addEventListener("click", (e) => { if (e.target === searchModal) closeSearchModal(); });
   qInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
       const q = qInput.value.trim();
-      if (q) { qInput.blur(); go(() => showSearch(q)); }
+      if (q) { closeSearchModal(); go(() => showSearch(q)); }
+    } else if (e.key === "Escape") {
+      closeSearchModal();
     }
   });
 
