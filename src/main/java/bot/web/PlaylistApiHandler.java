@@ -1,32 +1,42 @@
 package bot.web;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
-
-import tools.jackson.databind.ObjectMapper;
 
 import bot.slash.music.PlayerManager;
 import bot.slash.playlist.PlaylistService;
 import bot.slash.playlist.PlaylistService.StoredTrack;
+import bot.slash.playlist.PlaylistService.TokenOwner;
+import tools.jackson.databind.ObjectMapper;
 
 /**
- * Read-only JSON + audio API for the playlist web player:
+ * JSON + audio API for the playlist web player. The read endpoints are public; the write endpoints
+ * require a per-user token (issued by {@code /playlist link}, sent in the {@code X-Playlist-Token}
+ * header) and only ever touch the token owner's own playlist.
  *
  * <ul>
  *   <li>{@code GET /api/users} — every user with a playlist (id, name, track count)
  *   <li>{@code GET /api/users/{userId}/tracks} — that user's tracks in order
  *   <li>{@code GET /api/tracks/{id}/audio} — the track decoded to Ogg/Opus, streamed to the browser
+ *   <li>{@code GET /api/search?q=…} — search results' metadata (no audio decoded)
+ *   <li>{@code GET /api/me} (token) — the calling user's id and name
+ *   <li>{@code POST /api/playlist/tracks} (token, body {@code {"uri": …}}) — add a track to the caller's playlist
+ *   <li>{@code DELETE /api/playlist/tracks/{id}} (token) — remove one of the caller's tracks
  * </ul>
  *
  * The audio endpoint reuses {@link PlayerManager#downloadOgg} (the same pipeline as {@code /song}).
@@ -40,6 +50,14 @@ public class PlaylistApiHandler implements HttpHandler {
     // tracks (≈ a few hundred MB worst case) using access-order LRU eviction.
     private static final int AUDIO_CACHE_MAX = 12;
     private static final long DECODE_TIMEOUT_SECONDS = 90;
+    // Resolving search/add metadata is network-bound but quick; cap the wait so a wedged source can't
+    // hold a web-server thread forever.
+    private static final long RESOLVE_TIMEOUT_SECONDS = 20;
+    private static final int SEARCH_LIMIT = 12;
+    private static final long MAX_BODY_BYTES = 4096;
+
+    /** A search hit's metadata, mirroring {@link StoredTrack} minus the (not-yet-stored) id. */
+    public record SearchResult(String title, String author, String uri, int durationMs, String thumbnailUrl) {}
 
     private final PlaylistService playlistService;
     private final Map<Integer, byte[]> audioCache = Collections.synchronizedMap(new LinkedHashMap<>(16, 0.75f, true) {
@@ -56,36 +74,171 @@ public class PlaylistApiHandler implements HttpHandler {
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         try {
-            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-                sendText(exchange, 405, "Method Not Allowed");
-                return;
-            }
-
+            String method = exchange.getRequestMethod();
             String path = exchange.getRequestURI().getPath();
-            if (path.equals("/api/users")) {
-                sendJson(exchange, playlistService.listOwners());
+
+            if ("GET".equalsIgnoreCase(method)) {
+                handleGet(exchange, path);
                 return;
             }
-
-            // /api/users/{userId}/tracks
-            if (path.startsWith("/api/users/") && path.endsWith("/tracks")) {
-                String userId = path.substring("/api/users/".length(), path.length() - "/tracks".length());
-                sendJson(exchange, playlistService.getTracks(userId));
+            if ("POST".equalsIgnoreCase(method) && path.equals("/api/playlist/tracks")) {
+                handleAddTrack(exchange);
                 return;
             }
-
-            // /api/tracks/{id}/audio
-            if (path.startsWith("/api/tracks/") && path.endsWith("/audio")) {
-                String idPart = path.substring("/api/tracks/".length(), path.length() - "/audio".length());
-                handleAudio(exchange, idPart);
+            if ("DELETE".equalsIgnoreCase(method) && path.startsWith("/api/playlist/tracks/")) {
+                handleRemoveTrack(exchange, path.substring("/api/playlist/tracks/".length()));
                 return;
             }
-
-            sendText(exchange, 404, "Not Found");
+            sendText(exchange, 405, "Method Not Allowed");
         } catch (Exception e) {
             LOGGER.error("Error handling {}", exchange.getRequestURI(), e);
             safeError(exchange);
         }
+    }
+
+    private void handleGet(HttpExchange exchange, String path) throws IOException {
+        if (path.equals("/api/users")) {
+            sendJson(exchange, playlistService.listOwners());
+            return;
+        }
+        if (path.equals("/api/search")) {
+            handleSearch(exchange);
+            return;
+        }
+        if (path.equals("/api/me")) {
+            TokenOwner owner = authenticate(exchange);
+            if (owner == null) {
+                sendText(exchange, 401, "Unauthorized");
+                return;
+            }
+            sendJson(exchange, Map.of("userId", owner.userId(), "userName", owner.userName()));
+            return;
+        }
+        // /api/users/{userId}/tracks
+        if (path.startsWith("/api/users/") && path.endsWith("/tracks")) {
+            String userId = path.substring("/api/users/".length(), path.length() - "/tracks".length());
+            sendJson(exchange, playlistService.getTracks(userId));
+            return;
+        }
+        // /api/tracks/{id}/audio
+        if (path.startsWith("/api/tracks/") && path.endsWith("/audio")) {
+            String idPart = path.substring("/api/tracks/".length(), path.length() - "/audio".length());
+            handleAudio(exchange, idPart);
+            return;
+        }
+        sendText(exchange, 404, "Not Found");
+    }
+
+    // ---- search & edit ----------------------------------------------------------------------
+
+    private void handleSearch(HttpExchange exchange) throws IOException {
+        String query = queryParam(exchange, "q");
+        if (query == null || query.isBlank()) {
+            sendJson(exchange, List.of());
+            return;
+        }
+        String identifier = isUrl(query) ? query : "ytsearch:" + query;
+        List<AudioTrackInfo> hits;
+        try {
+            hits = PlayerManager.getInstance()
+                    .search(identifier, SEARCH_LIMIT)
+                    .get(RESOLVE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            LOGGER.warn("Search failed for '{}'", query, e);
+            sendText(exchange, 502, "Search failed.");
+            return;
+        }
+        List<SearchResult> results =
+                hits.stream().map(PlaylistApiHandler::toSearchResult).toList();
+        sendJson(exchange, results);
+    }
+
+    private void handleAddTrack(HttpExchange exchange) throws IOException {
+        TokenOwner owner = authenticate(exchange);
+        if (owner == null) {
+            sendText(exchange, 401, "Unauthorized");
+            return;
+        }
+        String uri = readUri(exchange);
+        if (uri == null || uri.isBlank()) {
+            sendText(exchange, 400, "Missing 'uri'.");
+            return;
+        }
+        AudioTrackInfo info;
+        try {
+            info = PlayerManager.getInstance().resolve(uri).get(RESOLVE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            LOGGER.warn("Couldn't resolve '{}' for {}", uri, owner.userId(), e);
+            sendText(exchange, 502, "Couldn't add that track.");
+            return;
+        }
+        int id = playlistService.addTrack(owner.userId(), owner.userName(), info);
+        int durationMs = info.isStream ? 0 : (int) Math.min(info.length, Integer.MAX_VALUE);
+        sendJson(exchange, new StoredTrack(id, info.title, info.author, info.uri, durationMs, info.artworkUrl));
+    }
+
+    private void handleRemoveTrack(HttpExchange exchange, String idPart) throws IOException {
+        TokenOwner owner = authenticate(exchange);
+        if (owner == null) {
+            sendText(exchange, 401, "Unauthorized");
+            return;
+        }
+        int id;
+        try {
+            id = Integer.parseInt(idPart);
+        } catch (NumberFormatException e) {
+            sendText(exchange, 400, "Bad track id");
+            return;
+        }
+        boolean removed = playlistService.removeTrackById(owner.userId(), id);
+        sendText(exchange, removed ? 200 : 404, removed ? "OK" : "Not Found");
+    }
+
+    /** Resolves the {@code X-Playlist-Token} header to its owner, or {@code null} if absent/invalid. */
+    private TokenOwner authenticate(HttpExchange exchange) {
+        return playlistService.resolveToken(exchange.getRequestHeaders().getFirst("X-Playlist-Token"));
+    }
+
+    /** Reads the {@code uri} field from a small JSON request body. */
+    private String readUri(HttpExchange exchange) throws IOException {
+        try (InputStream in = exchange.getRequestBody()) {
+            byte[] body = in.readNBytes((int) MAX_BODY_BYTES);
+            if (body.length == 0) {
+                return null;
+            }
+            Map<?, ?> json = MAPPER.readValue(body, Map.class);
+            Object uri = json.get("uri");
+            return uri == null ? null : uri.toString();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Returns the named query parameter (URL-decoded), or {@code null} if absent. */
+    private String queryParam(HttpExchange exchange, String name) {
+        String raw = exchange.getRequestURI().getRawQuery();
+        if (raw == null) {
+            return null;
+        }
+        for (String pair : raw.split("&")) {
+            int eq = pair.indexOf('=');
+            String key = eq < 0 ? pair : pair.substring(0, eq);
+            if (key.equals(name)) {
+                String value = eq < 0 ? "" : pair.substring(eq + 1);
+                return URLDecoder.decode(value, StandardCharsets.UTF_8);
+            }
+        }
+        return null;
+    }
+
+    private static SearchResult toSearchResult(AudioTrackInfo info) {
+        int durationMs = info.isStream ? 0 : (int) Math.min(info.length, Integer.MAX_VALUE);
+        return new SearchResult(info.title, info.author, info.uri, durationMs, info.artworkUrl);
+    }
+
+    private static boolean isUrl(String query) {
+        String lower = query.toLowerCase();
+        return lower.startsWith("http://") || lower.startsWith("https://");
     }
 
     private void handleAudio(HttpExchange exchange, String idPart) throws IOException {

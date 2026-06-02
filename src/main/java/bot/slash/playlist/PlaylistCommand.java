@@ -48,12 +48,13 @@ public class PlaylistCommand extends SlashCommand {
                                 .addOptions(new OptionData(
                                         OptionType.STRING, SONG_OPTION, "A song URL or search term", true)),
                         new SubcommandData("show", "Show your playlist (or someone else's)")
-                                .addOptions(new OptionData(
-                                        OptionType.USER, USER_OPTION, "Whose playlist to show", false)),
+                                .addOptions(
+                                        new OptionData(OptionType.USER, USER_OPTION, "Whose playlist to show", false)),
                         new SubcommandData("remove", "Remove a song from your playlist by its number")
                                 .addOptions(new OptionData(
                                         OptionType.INTEGER, NUMBER_OPTION, "The number shown by /playlist show", true)),
-                        new SubcommandData("clear", "Remove every song from your playlist"));
+                        new SubcommandData("clear", "Remove every song from your playlist"),
+                        new SubcommandData("link", "Get a private link to manage your playlist online"));
     }
 
     @Override
@@ -68,6 +69,7 @@ public class PlaylistCommand extends SlashCommand {
             case "show" -> handleShow(event);
             case "remove" -> handleRemove(event);
             case "clear" -> handleClear(event);
+            case "link" -> handleLink(event);
             default -> {}
         }
     }
@@ -115,9 +117,10 @@ public class PlaylistCommand extends SlashCommand {
         boolean isSelf = target.getId().equals(event.getUser().getId());
 
         if (tracks.isEmpty()) {
-            event.reply(isSelf
-                            ? "🎵 Your playlist is empty — add songs with `/playlist add`."
-                            : "🎵 " + target.getEffectiveName() + " hasn't added any songs yet.")
+            event.reply(
+                            isSelf
+                                    ? "🎵 Your playlist is empty — add songs with `/playlist add`."
+                                    : "🎵 " + target.getEffectiveName() + " hasn't added any songs yet.")
                     .setEphemeral(isSelf)
                     .queue();
             return;
@@ -136,7 +139,10 @@ public class PlaylistCommand extends SlashCommand {
                     .append(track.uri())
                     .append(")");
             if (track.durationMs() > 0) {
-                description.append(" `").append(MusicFormat.duration(track.durationMs())).append("`");
+                description
+                        .append(" `")
+                        .append(MusicFormat.duration(track.durationMs()))
+                        .append("`");
             }
             description.append("\n");
         }
@@ -160,8 +166,7 @@ public class PlaylistCommand extends SlashCommand {
     }
 
     private void handleRemove(SlashCommandInteractionEvent event) {
-        int number = Objects.requireNonNull(event.getOption(NUMBER_OPTION))
-                .getAsInt();
+        int number = Objects.requireNonNull(event.getOption(NUMBER_OPTION)).getAsInt();
 
         String removed = playlistService.removeTrack(event.getUser().getId(), number);
         if (removed == null) {
@@ -177,14 +182,45 @@ public class PlaylistCommand extends SlashCommand {
     private void handleClear(SlashCommandInteractionEvent event) {
         int removed = playlistService.clear(event.getUser().getId());
         if (removed == 0) {
-            event.reply("🎵 Your playlist is already empty.")
-                    .setEphemeral(true)
-                    .queue();
+            event.reply("🎵 Your playlist is already empty.").setEphemeral(true).queue();
             return;
         }
 
         event.reply("🗑️ Cleared your playlist (" + removed + (removed == 1 ? " song" : " songs") + ").")
                 .queue();
+    }
+
+    private void handleLink(SlashCommandInteractionEvent event) {
+        if (webBaseUrl == null) {
+            event.reply("⚠️ The web player isn't configured on this bot.")
+                    .setEphemeral(true)
+                    .queue();
+            return;
+        }
+
+        String token = playlistService.issueToken(event.getUser().getId(), displayName(event));
+        String url = webBaseUrl + "/?token=" + token;
+
+        EmbedBuilder embed = new EmbedBuilder()
+                .setColor(ACCENT)
+                .setTitle("🔗 Your private playlist link")
+                .setDescription("Open this to add and remove songs from your playlist online:\n" + url)
+                .setFooter("Keep this link private — anyone with it can edit your playlist. "
+                        + "Running /playlist link again replaces it.");
+
+        // Defer ephemerally; the DM is the real payload, so the in-channel reply just confirms it.
+        event.deferReply(true).queue();
+        event.getUser()
+                .openPrivateChannel()
+                .flatMap(channel -> channel.sendMessageEmbeds(embed.build()))
+                .queue(
+                        sent -> event.getHook()
+                                .sendMessage("📬 I've DMed you a private link to manage your playlist online.")
+                                .queue(),
+                        // DMs closed: fall back to the (private) ephemeral reply.
+                        error -> event.getHook()
+                                .sendMessage("Here's your private playlist link — keep it secret:\n" + url)
+                                .queue());
     }
 
     private static String displayName(SlashCommandInteractionEvent event) {

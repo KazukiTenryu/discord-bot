@@ -197,6 +197,30 @@
     z-index: 30; max-width: 90vw;
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* search bar — only shown once a valid token is loaded */
+  .searchbar { display: none; padding: 6px 16px 8px; }
+  body.authed .searchbar { display: block; }
+  .searchbar input {
+    width: 100%; max-width: 760px; margin: 0 auto; display: block;
+    background: var(--bg-card); border: 1px solid var(--line); color: var(--text);
+    border-radius: 999px; padding: 11px 16px; font-size: 15px; outline: none;
+    -webkit-appearance: none; appearance: none;
+  }
+  .searchbar input::placeholder { color: var(--muted); }
+  .searchbar input:focus { border-color: var(--accent); }
+
+  /* round per-row action button (add in search results, remove in your playlist) */
+  .rowbtn {
+    border: 0; background: var(--bg-elev); color: var(--text);
+    width: 36px; height: 36px; flex: 0 0 auto; border-radius: 50%;
+    display: grid; place-items: center; cursor: pointer;
+  }
+  .rowbtn:active { background: var(--bg-card); }
+  .rowbtn svg { width: 20px; height: 20px; fill: currentColor; }
+  .rowbtn.added { background: var(--accent); color: #06120a; }
+  .rowbtn.remove { color: var(--muted); }
+  .rowbtn[disabled] { opacity: .6; }
 </style>
 </head>
 <body>
@@ -207,6 +231,11 @@
       <div class="sub" id="subtitle">Pick someone to start listening</div>
     </div>
   </header>
+
+  <div class="searchbar">
+    <input id="q" type="search" inputmode="search" enterkeyhint="search" autocomplete="off"
+           placeholder="Search songs to add to your playlist…" />
+  </div>
 
   <main id="view"><div class="loading">Loading…</div></main>
 
@@ -283,6 +312,24 @@
   let queue = [];      // current playlist's tracks
   let index = -1;      // index of the playing track within queue
   let seeking = false;
+  let me = null;       // {userId, userName} once a valid token is loaded, else null
+
+  const qInput = document.getElementById("q");
+
+  // A personal token may arrive as ?token=… (from /playlist link). Stash it, then scrub it from the
+  // URL so it isn't shared/bookmarked, preserving any ?user= deep-link.
+  let authToken = null;
+  try {
+    const params = new URLSearchParams(location.search);
+    const urlToken = params.get("token");
+    if (urlToken) {
+      localStorage.setItem("plToken", urlToken);
+      params.delete("token");
+      const qs = params.toString();
+      history.replaceState(null, "", location.pathname + (qs ? "?" + qs : ""));
+    }
+    authToken = localStorage.getItem("plToken");
+  } catch (e) { /* private mode / storage disabled — editing just stays off */ }
 
   function fmt(sec) {
     if (!isFinite(sec) || sec < 0) sec = 0;
@@ -351,6 +398,7 @@
         view.innerHTML = '<div class="empty">This playlist is empty.</div>';
         return;
       }
+      const canEdit = !!me && String(user.userId) === String(me.userId);
       const list = document.createElement("div");
       list.className = "tracks";
       tracks.forEach((t, i) => {
@@ -369,6 +417,14 @@
         row.querySelector(".title").textContent = t.title;
         row.querySelector(".author").textContent = t.author || "";
         row.addEventListener("click", () => { queue = tracks; playAt(i); });
+        if (canEdit) {
+          const del = document.createElement("button");
+          del.className = "rowbtn remove";
+          del.setAttribute("aria-label", "Remove from playlist");
+          del.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7 6V4h10v2h5v2h-2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8H2V6h5zm2 4v8h2v-8H9zm4 0v8h2v-8h-2z"/></svg>';
+          del.addEventListener("click", (e) => { e.stopPropagation(); removeFromPlaylist(t, user); });
+          row.appendChild(del);
+        }
         list.appendChild(row);
       });
       view.innerHTML = "";
@@ -385,6 +441,106 @@
       row.classList.toggle("playing", row.dataset.id === playingId);
     });
   }
+
+  // ---- search & editing ------------------------------------------------------
+
+  async function loadMe() {
+    if (!authToken) return;
+    try {
+      const res = await fetch("/api/me", { headers: { "X-Playlist-Token": authToken } });
+      if (res.ok) {
+        me = await res.json();
+        document.body.classList.add("authed");
+      } else if (res.status === 401) {
+        authToken = null;
+        try { localStorage.removeItem("plToken"); } catch (e) {}
+      }
+    } catch (e) { /* offline / API down — stay in read-only mode */ }
+  }
+
+  async function doSearch(query) {
+    query = (query || "").trim();
+    if (!query) return;
+    qInput.blur();
+    header.classList.add("has-back");
+    titleEl.textContent = "Search";
+    subtitleEl.textContent = "“" + query + "”";
+    view.innerHTML = '<div class="loading">Searching…</div>';
+    let results;
+    try {
+      results = await getJSON("/api/search?q=" + encodeURIComponent(query));
+    } catch (e) {
+      view.innerHTML = '<div class="empty">Search failed — try again.</div>';
+      return;
+    }
+    if (!results.length) {
+      view.innerHTML = '<div class="empty">No results for “' + query + '”.</div>';
+      return;
+    }
+    const list = document.createElement("div");
+    list.className = "tracks";
+    results.forEach((t) => {
+      const row = document.createElement("div");
+      row.className = "track";
+      const art = t.thumbnailUrl ? t.thumbnailUrl : FALLBACK_ART;
+      row.innerHTML =
+        '<img class="art" loading="lazy" />' +
+        '<div class="meta"><div class="title"></div><div class="author"></div></div>' +
+        '<div class="dur">' + (t.durationMs > 0 ? fmt(t.durationMs / 1000) : "") + "</div>";
+      const img = row.querySelector(".art");
+      img.src = art;
+      img.onerror = () => { img.src = FALLBACK_ART; };
+      row.querySelector(".title").textContent = t.title;
+      row.querySelector(".author").textContent = t.author || "";
+      const btn = document.createElement("button");
+      btn.className = "rowbtn";
+      btn.setAttribute("aria-label", "Add to playlist");
+      btn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>';
+      btn.addEventListener("click", () => addToPlaylist(t, btn));
+      row.appendChild(btn);
+      list.appendChild(row);
+    });
+    view.innerHTML = "";
+    view.appendChild(list);
+  }
+
+  async function addToPlaylist(t, btn) {
+    if (!authToken) { toast("Open your /playlist link to add songs."); return; }
+    btn.disabled = true;
+    try {
+      const res = await fetch("/api/playlist/tracks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Playlist-Token": authToken },
+        body: JSON.stringify({ uri: t.uri }),
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      btn.classList.add("added");
+      btn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>';
+      toast("Added “" + t.title + "” to your playlist.");
+    } catch (e) {
+      btn.disabled = false;
+      toast("Couldn’t add that one.");
+    }
+  }
+
+  async function removeFromPlaylist(t, user) {
+    try {
+      const res = await fetch("/api/playlist/tracks/" + t.id, {
+        method: "DELETE",
+        headers: { "X-Playlist-Token": authToken },
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      toast("Removed “" + t.title + "”.");
+      if (user.trackCount > 0) user.trackCount -= 1;
+      showTracks(user); // re-render from the server so indices/handlers stay correct
+    } catch (e) {
+      toast("Couldn’t remove that one.");
+    }
+  }
+
+  qInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); doSearch(qInput.value); }
+  });
 
   // ---- playback --------------------------------------------------------------
 
@@ -483,8 +639,13 @@
     showUsers();
   }
 
-  const deepUser = new URLSearchParams(location.search).get("user");
-  if (deepUser) openUserById(deepUser); else showUsers();
+  (async function init() {
+    await loadMe();
+    const deepUser = new URLSearchParams(location.search).get("user");
+    if (deepUser) openUserById(deepUser);
+    else if (me) openUserById(me.userId); // arrived via token → land on your own playlist
+    else showUsers();
+  })();
 })();
 </script>
 </body>

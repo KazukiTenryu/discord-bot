@@ -1,6 +1,8 @@
 package bot.slash.music;
 
 import java.io.ByteArrayOutputStream;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -220,6 +222,47 @@ public class PlayerManager {
     }
 
     /**
+     * Searches for {@code query} (a URL or a {@code ytsearch:} term) and returns up to {@code limit}
+     * matches' metadata, without decoding any audio. Used by the web player's search bar. A direct URL
+     * resolves to a single result; a search term yields the ranked candidates. The future completes
+     * with an empty list when nothing matches, and never fails for a "no match" — only for load errors.
+     */
+    public CompletableFuture<List<AudioTrackInfo>> search(String query, int limit) {
+        CompletableFuture<List<AudioTrackInfo>> future = new CompletableFuture<>();
+
+        audioPlayerManager.loadItem(query, new AudioLoadResultHandler() {
+            @Override
+            public void trackLoaded(AudioTrack track) {
+                future.complete(List.of(track.getInfo()));
+            }
+
+            @Override
+            public void playlistLoaded(AudioPlaylist playlist) {
+                List<AudioTrackInfo> results = new ArrayList<>();
+                for (AudioTrack track : playlist.getTracks()) {
+                    if (results.size() >= limit) {
+                        break;
+                    }
+                    results.add(track.getInfo());
+                }
+                future.complete(results);
+            }
+
+            @Override
+            public void noMatches() {
+                future.complete(List.of());
+            }
+
+            @Override
+            public void loadFailed(FriendlyException exception) {
+                future.completeExceptionally(exception);
+            }
+        });
+
+        return future;
+    }
+
+    /**
      * Resolves {@code identifier} and appends it to {@code guild}'s queue without posting any chat
      * message (unlike {@link #loadAndPlay}). Used by {@code /play-playlist} to enqueue stored tracks
      * in bulk; the returned future completes with the queued track (the first, for a playlist) or
@@ -242,9 +285,8 @@ public class PlayerManager {
                     future.completeExceptionally(new NoMatchException(identifier));
                     return;
                 }
-                AudioTrack first = playlist.isSearchResult()
-                        ? playlist.getTracks().getFirst()
-                        : null;
+                AudioTrack first =
+                        playlist.isSearchResult() ? playlist.getTracks().getFirst() : null;
                 if (first != null) {
                     musicManager.getScheduler().queue(first);
                     future.complete(first);

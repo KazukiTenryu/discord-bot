@@ -1,9 +1,12 @@
 package bot.slash.playlist;
 
+import static bot.database.jooq.Tables.PLAYLIST_TOKENS;
 import static bot.database.jooq.Tables.PLAYLIST_TRACKS;
 import static org.jooq.impl.DSL.count;
 import static org.jooq.impl.DSL.max;
 
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.List;
 
 import org.jooq.Field;
@@ -19,11 +22,17 @@ import bot.database.Database;
  */
 public class PlaylistService {
     /** A stored track, as needed by both the {@code /playlist} embeds and the web API. */
-    public record StoredTrack(
-            int id, String title, String author, String uri, int durationMs, String thumbnailUrl) {}
+    public record StoredTrack(int id, String title, String author, String uri, int durationMs, String thumbnailUrl) {}
 
     /** A user who owns at least one track, with their latest known display name and track count. */
     public record PlaylistOwner(String userId, String userName, int trackCount) {}
+
+    /** The Discord user a web-player token belongs to. */
+    public record TokenOwner(String userId, String userName) {}
+
+    // 24 random bytes → 32-char url-safe token; ample entropy and clean in a URL.
+    private static final SecureRandom RANDOM = new SecureRandom();
+    private static final Base64.Encoder TOKEN_ENCODER = Base64.getUrlEncoder().withoutPadding();
 
     private final Database database;
 
@@ -31,11 +40,14 @@ public class PlaylistService {
         this.database = database;
     }
 
-    /** Appends {@code info} to {@code userId}'s playlist, refreshing the stored display name. */
-    public void addTrack(String userId, String userName, AudioTrackInfo info) {
+    /**
+     * Appends {@code info} to {@code userId}'s playlist, refreshing the stored display name, and
+     * returns the new row's id.
+     */
+    public int addTrack(String userId, String userName, AudioTrackInfo info) {
         // duration_ms is an INTEGER column (ms comfortably fits an int); streams have no real length.
         int durationMs = info.isStream ? 0 : (int) Math.min(info.length, Integer.MAX_VALUE);
-        database.write(ctx -> ctx.insertInto(PLAYLIST_TRACKS)
+        return database.writeAndProvide(ctx -> ctx.insertInto(PLAYLIST_TRACKS)
                 .set(PLAYLIST_TRACKS.USER_ID, userId)
                 .set(PLAYLIST_TRACKS.USER_NAME, userName)
                 .set(PLAYLIST_TRACKS.TITLE, info.title)
@@ -43,7 +55,9 @@ public class PlaylistService {
                 .set(PLAYLIST_TRACKS.URI, info.uri)
                 .set(PLAYLIST_TRACKS.DURATION_MS, durationMs)
                 .set(PLAYLIST_TRACKS.THUMBNAIL_URL, info.artworkUrl)
-                .execute());
+                .returning(PLAYLIST_TRACKS.ID)
+                .fetchOne()
+                .getId());
     }
 
     /** A user's tracks in insertion order (oldest first). */
@@ -86,6 +100,51 @@ public class PlaylistService {
                     .execute();
             return title;
         });
+    }
+
+    /**
+     * Removes the track with the given {@code trackId} from {@code userId}'s playlist. The user_id
+     * match makes this safe for the web API: a caller can only delete their own tracks. Returns
+     * {@code true} if a row was removed.
+     */
+    public boolean removeTrackById(String userId, int trackId) {
+        return database.writeAndProvide(ctx -> ctx.deleteFrom(PLAYLIST_TRACKS)
+                        .where(PLAYLIST_TRACKS.ID.eq(trackId))
+                        .and(PLAYLIST_TRACKS.USER_ID.eq(userId))
+                        .execute())
+                > 0;
+    }
+
+    /**
+     * Issues (or rotates) {@code userId}'s web-player token and returns it. There is one token per
+     * user; calling this again replaces the previous one, invalidating any older link.
+     */
+    public String issueToken(String userId, String userName) {
+        byte[] bytes = new byte[24];
+        RANDOM.nextBytes(bytes);
+        String token = TOKEN_ENCODER.encodeToString(bytes);
+        database.write(ctx -> ctx.insertInto(PLAYLIST_TOKENS)
+                .set(PLAYLIST_TOKENS.TOKEN, token)
+                .set(PLAYLIST_TOKENS.USER_ID, userId)
+                .set(PLAYLIST_TOKENS.USER_NAME, userName)
+                .onConflict(PLAYLIST_TOKENS.USER_ID)
+                .doUpdate()
+                .set(PLAYLIST_TOKENS.TOKEN, token)
+                .set(PLAYLIST_TOKENS.USER_NAME, userName)
+                .execute());
+        return token;
+    }
+
+    /** Resolves a web-player token to its owner, or {@code null} if the token is unknown. */
+    public TokenOwner resolveToken(String token) {
+        if (token == null || token.isBlank()) {
+            return null;
+        }
+        return database.read(ctx -> ctx.select(PLAYLIST_TOKENS.USER_ID, PLAYLIST_TOKENS.USER_NAME)
+                .from(PLAYLIST_TOKENS)
+                .where(PLAYLIST_TOKENS.TOKEN.eq(token))
+                .fetchOne(record ->
+                        new TokenOwner(record.get(PLAYLIST_TOKENS.USER_ID), record.get(PLAYLIST_TOKENS.USER_NAME))));
     }
 
     /** Empties {@code userId}'s playlist, returning the number of tracks removed. */

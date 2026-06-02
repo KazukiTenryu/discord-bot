@@ -14,7 +14,8 @@ import bot.slash.playlist.PlaylistService;
 /**
  * Lightweight HTTP server for the playlist web player, built on the JDK's {@code com.sun.net.httpserver}
  * (no extra dependency). Serves a static mobile-friendly page at {@code /} and a small JSON/audio API
- * under {@code /api/}. Intended to sit behind nginx; it binds all interfaces and is read-only.
+ * under {@code /api/}. Intended to sit behind nginx; it binds all interfaces. Browsing is public;
+ * playlist edits require a per-user token (see {@link PlaylistApiHandler}).
  */
 public class WebServer {
     private static final Logger LOGGER = LogManager.getLogger(WebServer.class);
