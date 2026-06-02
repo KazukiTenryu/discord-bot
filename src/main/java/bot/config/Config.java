@@ -26,12 +26,24 @@ public record Config(
         @JsonProperty("autoModIgnoredChannels") List<String> autoModIgnoredChannels,
         // Port for the playlist web player (bot.web.WebServer). Falls back to a built-in default
         // (see Config#webPortOrDefault) when absent, so existing deployments need no config change.
-        @JsonProperty("webPort") Integer webPort) {
+        @JsonProperty("webPort") Integer webPort,
+        // Public base URL the web player is reachable at (e.g. "https://playlist.sk96.uk"), used to
+        // build "listen online" links in /playlist show. When unset/blank, no link is shown.
+        @JsonProperty("webBaseUrl") String webBaseUrl) {
 
     private static final int DEFAULT_WEB_PORT = 8080;
 
     /** The configured web port, or the built-in default when unset. */
     public int webPortOrDefault() {
         return webPort == null ? DEFAULT_WEB_PORT : webPort;
+    }
+
+    /** The configured web base URL without any trailing slash, or {@code null} when unset/blank. */
+    public String webBaseUrlOrNull() {
+        if (webBaseUrl == null || webBaseUrl.isBlank()) {
+            return null;
+        }
+        String trimmed = webBaseUrl.strip();
+        return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
     }
 }

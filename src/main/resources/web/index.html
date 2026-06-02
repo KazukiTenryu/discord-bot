@@ -207,10 +207,10 @@
           <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
         </button>
         <button class="ctrl play" id="play" aria-label="Play/Pause">
-          <svg id="playIcon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          <svg viewBox="0 0 24 24"><path id="playIcon" d="M8 5v14l11-7z"/></svg>
         </button>
         <button class="ctrl" id="next" aria-label="Next">
-          <svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zm-9.5 6L15 6v12z"/></svg>
+          <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6z"/></svg>
         </button>
       </div>
     </div>
@@ -275,6 +275,7 @@
   // ---- views -----------------------------------------------------------------
 
   async function showUsers() {
+    history.replaceState(null, "", location.pathname);
     header.classList.remove("has-back");
     titleEl.textContent = "Playlists";
     subtitleEl.textContent = "Pick someone to start listening";
@@ -307,6 +308,7 @@
   }
 
   async function showTracks(user) {
+    history.replaceState(null, "", "?user=" + encodeURIComponent(user.userId));
     header.classList.add("has-back");
     titleEl.textContent = user.userName;
     subtitleEl.textContent = user.trackCount + (user.trackCount === 1 ? " song" : " songs");
@@ -414,7 +416,18 @@
     navigator.mediaSession.setActionHandler("nexttrack", next);
   }
 
-  showUsers();
+  // Open a specific playlist directly when linked with ?user=<id> (e.g. from /playlist show).
+  async function openUserById(userId) {
+    try {
+      const users = await getJSON("/api/users");
+      const match = users.find((u) => String(u.userId) === String(userId));
+      if (match) { showTracks(match); return; }
+    } catch (e) { /* fall through to the user list */ }
+    showUsers();
+  }
+
+  const deepUser = new URLSearchParams(location.search).get("user");
+  if (deepUser) openUserById(deepUser); else showUsers();
 })();
 </script>
 </body>

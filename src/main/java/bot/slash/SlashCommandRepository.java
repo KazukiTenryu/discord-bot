@@ -70,7 +70,7 @@ public class SlashCommandRepository {
         commands.add(new NowPlayingCommand());
         commands.add(new LyricsCommand());
 
-        commands.add(new PlaylistCommand(playlistService));
+        commands.add(new PlaylistCommand(playlistService, config.webBaseUrlOrNull()));
         commands.add(new PlayPlaylistCommand(playlistService));
 
         commands.addAll(ActionCommand.registerActionCommands(new HandleCommandAction(config)));

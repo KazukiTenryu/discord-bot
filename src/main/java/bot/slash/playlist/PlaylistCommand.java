@@ -34,10 +34,13 @@ public class PlaylistCommand extends SlashCommand {
     private static final String NUMBER_OPTION = "number";
 
     private final PlaylistService playlistService;
+    // Public base URL of the web player (no trailing slash), or null when not configured.
+    private final String webBaseUrl;
 
-    public PlaylistCommand(PlaylistService playlistService) {
+    public PlaylistCommand(PlaylistService playlistService, String webBaseUrl) {
         super("playlist", "Manage your personal playlist 🎵");
         this.playlistService = playlistService;
+        this.webBaseUrl = webBaseUrl;
 
         getData()
                 .addSubcommands(
@@ -146,6 +149,12 @@ public class PlaylistCommand extends SlashCommand {
                 .setTitle("🎵 " + target.getEffectiveName() + "'s playlist")
                 .setDescription(description.toString())
                 .setFooter(tracks.size() + (tracks.size() == 1 ? " song" : " songs"));
+
+        if (webBaseUrl != null) {
+            String url = webBaseUrl + "/?user=" + target.getId();
+            String host = webBaseUrl.replaceFirst("^https?://", "");
+            embed.addField("🔊 Listen online", "[" + host + "](" + url + ")", false);
+        }
 
         event.replyEmbeds(embed.build()).queue();
     }
