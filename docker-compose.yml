@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   discord-bot:
     build: .
@@ -10,7 +8,10 @@ services:
       - "127.0.0.1:8080:8080"
     volumes:
       - ./config.json:/app/config.json:ro
-      - ./bot.db:/app/bot.db
+      # Writable, botuser-owned volume holding bot.db plus its WAL/-shm sidecar files.
+      # DB_FILE=/app/data/bot.db (set in the Dockerfile) points the app here so data
+      # survives container rebuilds — a single-file bind mount loses the WAL sidecars.
+      - bot-data:/app/data
 
 volumes:
   bot-data:

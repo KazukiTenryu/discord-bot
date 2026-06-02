@@ -40,7 +40,14 @@ public class Main {
             System.setProperty("infoLogsChannelWebHookURL", config.infoLogsChannelWebHookURL());
             System.setProperty("errorLogsChannelWebHookURL", config.errorLogsChannelWebHookURL());
 
-            Database database = new Database("jdbc:sqlite:" + config.dbFile());
+            // DB_FILE env var (set by the Docker image to a writable volume path) overrides the
+            // configured dbFile so the SQLite file and its WAL/-shm sidecars live on a persistent
+            // volume in Docker; local runs fall back to config.dbFile().
+            String dbFile = System.getenv("DB_FILE");
+            if (dbFile == null || dbFile.isBlank()) {
+                dbFile = config.dbFile();
+            }
+            Database database = new Database("jdbc:sqlite:" + dbFile);
             metricService = new MetricService(database);
 
             // Configure YouTube OAuth (if set) before any /play can reach the player.
