@@ -4,7 +4,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,6 +24,7 @@ import bot.slash.music.PlayerManager;
 import bot.slash.playlist.PlaylistService;
 import bot.slash.playlist.PlaylistService.StoredTrack;
 import bot.slash.playlist.PlaylistService.TokenOwner;
+import bot.utils.LyricsService;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -33,6 +36,8 @@ import tools.jackson.databind.ObjectMapper;
  *   <li>{@code GET /api/users} — every user with a playlist (id, name, track count)
  *   <li>{@code GET /api/users/{userId}/tracks} — that user's tracks in order
  *   <li>{@code GET /api/tracks/{id}/audio} — the track decoded to Ogg/Opus, streamed to the browser
+ *       ({@code ?download} sends it as a {@code .ogg} attachment instead)
+ *   <li>{@code GET /api/lyrics?title=&artist=} — plain lyrics from lrclib.net, or 404 if none match
  *   <li>{@code GET /api/search?q=…} — search results' metadata (no audio decoded)
  *   <li>{@code GET /api/me} (token) — the calling user's id and name
  *   <li>{@code POST /api/playlist/tracks} (token, body {@code {"uri": …}}) — add a track to the caller's playlist
@@ -60,6 +65,7 @@ public class PlaylistApiHandler implements HttpHandler {
     public record SearchResult(String title, String author, String uri, int durationMs, String thumbnailUrl) {}
 
     private final PlaylistService playlistService;
+    private final LyricsService lyricsService = new LyricsService();
     private final Map<Integer, byte[]> audioCache = Collections.synchronizedMap(new LinkedHashMap<>(16, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<Integer, byte[]> eldest) {
@@ -103,6 +109,10 @@ public class PlaylistApiHandler implements HttpHandler {
         }
         if (path.equals("/api/search")) {
             handleSearch(exchange);
+            return;
+        }
+        if (path.equals("/api/lyrics")) {
+            handleLyrics(exchange);
             return;
         }
         if (path.equals("/api/me")) {
@@ -151,6 +161,38 @@ public class PlaylistApiHandler implements HttpHandler {
         List<SearchResult> results =
                 hits.stream().map(PlaylistApiHandler::toSearchResult).toList();
         sendJson(exchange, results);
+    }
+
+    private void handleLyrics(HttpExchange exchange) throws IOException {
+        String title = queryParam(exchange, "title");
+        String artist = queryParam(exchange, "artist");
+        if (title == null || title.isBlank()) {
+            sendText(exchange, 400, "Missing 'title'.");
+            return;
+        }
+        // Strip "(Official Video)"-style noise that hurts the match, then pair with the artist —
+        // the same query shape /lyrics uses.
+        String cleaned = title.replaceAll("[(\\[].*?[)\\]]", "").trim();
+        String query = (artist == null || artist.isBlank()) ? cleaned : (cleaned + " " + artist).trim();
+
+        Optional<LyricsService.Lyrics> lyrics;
+        try {
+            lyrics = lyricsService.fetch(query);
+        } catch (Exception e) {
+            // Lyrics are a nicety — never let a lookup failure surface as an error to the player.
+            LOGGER.warn("Lyrics lookup failed for '{}'", query, e);
+            sendText(exchange, 404, "No lyrics.");
+            return;
+        }
+        if (lyrics.isEmpty()) {
+            sendText(exchange, 404, "No lyrics.");
+            return;
+        }
+        LyricsService.Lyrics found = lyrics.get();
+        sendJson(exchange, Map.of(
+                "trackName", found.trackName(),
+                "artistName", found.artistName(),
+                "plainLyrics", found.plainLyrics()));
     }
 
     private void handleAddTrack(HttpExchange exchange) throws IOException {
@@ -266,7 +308,35 @@ public class PlaylistApiHandler implements HttpHandler {
             return;
         }
 
+        if (queryParam(exchange, "download") != null) {
+            sendDownload(exchange, audio, track);
+            return;
+        }
         sendAudio(exchange, audio);
+    }
+
+    /** Sends the whole file as an attachment so the browser saves it as {@code <title>.ogg}. */
+    private void sendDownload(HttpExchange exchange, byte[] audio, StoredTrack track) throws IOException {
+        String name = safeFilename(track.title()) + ".ogg";
+        // Both filename (ASCII fallback) and RFC 5987 filename* (UTF-8) so non-ASCII titles survive.
+        String encoded = URLEncoder.encode(name, StandardCharsets.UTF_8).replace("+", "%20");
+        exchange.getResponseHeaders().set("Content-Type", "audio/ogg");
+        exchange.getResponseHeaders().set(
+                "Content-Disposition",
+                "attachment; filename=\"" + name.replaceAll("[^\\x20-\\x7e]", "_") + "\"; filename*=UTF-8''" + encoded);
+        exchange.sendResponseHeaders(200, audio.length);
+        try (OutputStream out = exchange.getResponseBody()) {
+            out.write(audio);
+        }
+    }
+
+    /** Trims a track title down to a filesystem-friendly base filename. */
+    private static String safeFilename(String title) {
+        String cleaned = (title == null || title.isBlank() ? "track" : title)
+                .replaceAll("[\\\\/:*?\"<>|]", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+        return cleaned.length() > 80 ? cleaned.substring(0, 80).trim() : cleaned;
     }
 
     /** Returns the cached Ogg bytes for a track, decoding (and caching) on first request. */
