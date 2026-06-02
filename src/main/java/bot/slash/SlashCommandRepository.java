@@ -24,6 +24,7 @@ import bot.slash.music.PlayCommand;
 import bot.slash.music.QueueCommand;
 import bot.slash.music.ResumeCommand;
 import bot.slash.music.SkipCommand;
+import bot.slash.music.SongCommand;
 import bot.slash.music.StopCommand;
 import bot.slash.pet.*;
 import bot.slash.ping.PingCommand;
@@ -77,6 +78,7 @@ public class SlashCommandRepository {
         commands.add(new UnmuteCommand(config, auditService));
 
         commands.add(new PlayCommand());
+        commands.add(new SongCommand());
         commands.add(new SkipCommand());
         commands.add(new StopCommand());
         commands.add(new PauseCommand());

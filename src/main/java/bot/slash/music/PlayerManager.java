@@ -1,7 +1,14 @@
 package bot.slash.music;
 
+import java.io.ByteArrayOutputStream;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.interactions.InteractionHook;
@@ -11,12 +18,17 @@ import org.apache.logging.log4j.Logger;
 
 import com.sedmelluq.discord.lavaplayer.format.StandardAudioDataFormats;
 import com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler;
+import com.sedmelluq.discord.lavaplayer.player.AudioPlayer;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.player.DefaultAudioPlayerManager;
+import com.sedmelluq.discord.lavaplayer.player.event.AudioEventAdapter;
 import com.sedmelluq.discord.lavaplayer.source.AudioSourceManagers;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
 import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
+import com.sedmelluq.discord.lavaplayer.track.AudioTrackEndReason;
+import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
+import com.sedmelluq.discord.lavaplayer.track.playback.AudioFrame;
 
 import dev.lavalink.youtube.YoutubeAudioSourceManager;
 import dev.lavalink.youtube.clients.AndroidVrWithThumbnail;
@@ -34,10 +46,22 @@ public class PlayerManager {
     // Set this as the config value to run the one-time device-login flow and print a refresh token.
     private static final String OAUTH_INIT_SENTINEL = "INITIALIZE";
 
+    // DISCORD_OPUS is 48kHz stereo; these drive the Ogg container written by /song downloads.
+    private static final int DISCORD_OPUS_CHANNELS = 2;
+    private static final long MAX_DURATION_MS = 12 * 60 * 1000L;
+    // Kept under Discord's 10 MiB default attachment limit for non-boosted servers.
+    private static final int MAX_FILE_BYTES = 9_000_000;
+
     private static PlayerManager instance;
 
     private final AudioPlayerManager audioPlayerManager;
     private final Map<Long, GuildMusicManager> musicManagers;
+    // Off-thread decoders for /song; daemon so they never hold up shutdown.
+    private final ExecutorService downloadExecutor = Executors.newCachedThreadPool(runnable -> {
+        Thread thread = new Thread(runnable, "song-download");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     private PlayerManager(String youtubeOauthRefreshToken) {
         this.audioPlayerManager = new DefaultAudioPlayerManager();
@@ -72,8 +96,9 @@ public class PlayerManager {
 
     private void configureOauth(YoutubeAudioSourceManager youtube, String refreshToken) {
         if (refreshToken == null || refreshToken.isBlank()) {
-            LOGGER.warn("YouTube OAuth not configured — playback may fail with \"Sign in to confirm "
-                    + "you're not a bot\". Set youtubeOauthRefreshToken to \"{}\" once to obtain a token.",
+            LOGGER.warn(
+                    "YouTube OAuth not configured — playback may fail with \"Sign in to confirm "
+                            + "you're not a bot\". Set youtubeOauthRefreshToken to \"{}\" once to obtain a token.",
                     OAUTH_INIT_SENTINEL);
             return;
         }
@@ -154,5 +179,130 @@ public class PlayerManager {
                         .queue();
             }
         });
+    }
+
+    /** A track resolved by {@link #downloadOgg} together with its rendered Ogg/Opus bytes. */
+    public record DownloadedTrack(byte[] ogg, AudioTrackInfo info) {}
+
+    /**
+     * Searches for {@code query}, decodes the top hit to an in-memory Ogg/Opus file, and completes
+     * with the bytes plus the track metadata. The decode runs off-thread so callers can invoke this
+     * from a JDA event thread. The returned future fails if nothing matches, the track is a live
+     * stream, the load errors, or the result would exceed {@link #MAX_FILE_BYTES}.
+     */
+    public CompletableFuture<DownloadedTrack> downloadOgg(String query) {
+        CompletableFuture<DownloadedTrack> future = new CompletableFuture<>();
+
+        audioPlayerManager.loadItem(query, new AudioLoadResultHandler() {
+            @Override
+            public void trackLoaded(AudioTrack track) {
+                capture(track);
+            }
+
+            @Override
+            public void playlistLoaded(AudioPlaylist playlist) {
+                // A search (ytsearch:) returns a playlist of candidates; take the top hit.
+                if (playlist.getTracks().isEmpty()) {
+                    noMatches();
+                    return;
+                }
+                capture(playlist.getTracks().getFirst());
+            }
+
+            @Override
+            public void noMatches() {
+                future.completeExceptionally(new NoMatchException(query));
+            }
+
+            @Override
+            public void loadFailed(FriendlyException exception) {
+                future.completeExceptionally(exception);
+            }
+
+            private void capture(AudioTrack track) {
+                AudioTrackInfo info = track.getInfo();
+                if (info.isStream) {
+                    future.completeExceptionally(
+                            new IllegalArgumentException("That's a live stream, which can't be downloaded."));
+                    return;
+                }
+                if (info.length > MAX_DURATION_MS) {
+                    future.completeExceptionally(new IllegalArgumentException(
+                            "That track is over " + (MAX_DURATION_MS / 60_000) + " minutes long."));
+                    return;
+                }
+                // Move the blocking decode off LavaPlayer's loader thread.
+                downloadExecutor.execute(() -> {
+                    try {
+                        future.complete(new DownloadedTrack(renderOgg(track), info));
+                    } catch (Exception e) {
+                        future.completeExceptionally(e);
+                    }
+                });
+            }
+        });
+
+        return future;
+    }
+
+    /** Plays {@code track} through a throwaway player, packing its Opus frames into an Ogg file. */
+    private byte[] renderOgg(AudioTrack track) throws Exception {
+        AudioPlayer player = audioPlayerManager.createPlayer();
+        CountDownLatch ended = new CountDownLatch(1);
+        AtomicReference<AudioTrackEndReason> endReason = new AtomicReference<>();
+        AtomicReference<FriendlyException> trackError = new AtomicReference<>();
+
+        player.addListener(new AudioEventAdapter() {
+            @Override
+            public void onTrackEnd(AudioPlayer player, AudioTrack track, AudioTrackEndReason reason) {
+                endReason.set(reason);
+                ended.countDown();
+            }
+
+            @Override
+            public void onTrackException(AudioPlayer player, AudioTrack track, FriendlyException exception) {
+                trackError.set(exception);
+            }
+        });
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        OggOpusWriter writer = new OggOpusWriter(out, DISCORD_OPUS_CHANNELS);
+        writer.writeHeaders();
+
+        try {
+            player.playTrack(track);
+            boolean finished = false;
+            while (!finished) {
+                AudioFrame frame = player.provide();
+                if (frame != null) {
+                    writer.writeAudioPacket(frame.getData());
+                    if (out.size() > MAX_FILE_BYTES) {
+                        throw new IllegalStateException("That song is too large to upload here.");
+                    }
+                    continue;
+                }
+                // No buffered frame: either the decoder is catching up, or the track has ended.
+                finished = ended.await(20, TimeUnit.MILLISECONDS);
+            }
+        } finally {
+            player.destroy();
+        }
+
+        if (trackError.get() != null) {
+            throw trackError.get();
+        }
+        if (endReason.get() == AudioTrackEndReason.LOAD_FAILED) {
+            throw new IllegalStateException("Couldn't decode that track.");
+        }
+
+        writer.finish();
+        return out.toByteArray();
+    }
+
+    /** Raised when a search/lookup yields nothing, so callers can word the reply themselves. */
+    public static final class NoMatchException extends RuntimeException {
+        public NoMatchException(String query) {
+            super(query);
+        }
     }
 }

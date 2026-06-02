@@ -113,7 +113,8 @@ public class DiscordLoggingAppender extends AbstractAppender {
 
         // Build the payload on the logging thread so it snapshots the message/timestamp now; the
         // worker thread only performs the HTTP I/O.
-        String payload = buildPayload(event.getLevel().name(), event.getMessage().getFormattedMessage());
+        String payload =
+                buildPayload(event.getLevel().name(), event.getMessage().getFormattedMessage());
         SENDER.execute(() -> deliver(webhookUrl, payload));
     }
 
