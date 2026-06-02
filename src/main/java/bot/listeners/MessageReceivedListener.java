@@ -28,8 +28,7 @@ public class MessageReceivedListener extends ListenerAdapter {
     // Default personality for this server (Unexpected!). Each deployment can override it via the
     // "aiPersonalityPrompt" key in config.json without touching code, so other servers keep their
     // own distinct personality.
-    private static final String DEFAULT_PERSONALITY_PROMPT =
-            """
+    private static final String DEFAULT_PERSONALITY_PROMPT = """
             You are "Unexpected!" - everyone's favourite personal assistant.
             You are Jarvis from Iron Man.
 
@@ -69,9 +68,9 @@ public class MessageReceivedListener extends ListenerAdapter {
             return;
         }
 
-//        if (event.getChannel().getIdLong() != 1490032285364519043L) {
-//            return;
-//        }
+        //        if (event.getChannel().getIdLong() != 1490032285364519043L) {
+        //            return;
+        //        }
 
         if (!message.getMentions().isMentioned(event.getJDA().getSelfUser())) {
             return;

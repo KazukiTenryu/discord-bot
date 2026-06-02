@@ -14,8 +14,7 @@ public class RulesCommand extends SlashCommand {
     // Default rules for this server (Unexpected!). Each deployment can override them via the
     // "rules" array in config.json — one entry per rule block — without touching code, so other
     // servers keep their own distinct rules.
-    private static final String DEFAULT_RULES =
-            """
+    private static final String DEFAULT_RULES = """
             1. Don't be a menance
                Be chill. If you're being annoying on purpose, we will notice... and we will judge.
 
