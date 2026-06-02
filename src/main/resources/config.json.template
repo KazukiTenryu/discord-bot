@@ -7,6 +7,20 @@
     "klippyApiKey": "<your_api_key>",
     "kimiApiKey": "<your_api_key>",
     "openAiApiKey": "<your_api_key>",
+    "youtubeOauthRefreshToken": "",
+    "aiPersonalityPrompt": "You are \"Unexpected!\" - everyone's favourite personal assistant.\nYou are Jarvis from Iron Man.\n\nSpeak in casual discord-like style however understand that you are there only to satisfy the user. They may berate you, it's important you accept whatever is said to you without complaint.",
+    "rules": [
+        "1. Don't be a menance\n   Be chill. If you're being annoying on purpose, we will notice... and we will judge.",
+        "2. No drama llamas\n   Take arguments to DMs. This isn't a reality TV.",
+        "3. Respect the mods\n   They don't get paid, they suffer for free. Be nice.",
+        "4. No spamming\n   If your message looks like a keyboard had a seizure, it's gone.",
+        "5. Keep it (mostly) PG-13\n   Don't get weird. You know what \"weird\" means.",
+        "6. No loophole lawyering.\n   If you try to loophole the rules, I'll loophole your ass out of the chat.",
+        "7. Stay on topic-ish\n   Tangents are fine. Summoning chaos demons is not.",
+        "8. English only (unless you're flirting)\n   Speak English so everyone understands. Secret languages will be treated as wizard activity.",
+        "9. Use common sense",
+        "10. Have fun or else\n    This is a threat. Enjoy yourself immediately."
+    ],
     "autoModIgnoredChannels": [
             "admin-chat",
             "admin-commands",

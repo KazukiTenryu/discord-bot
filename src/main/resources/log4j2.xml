@@ -18,6 +18,12 @@
             <AppenderRef ref="DiscordLoggingAppender"/>
         </Logger>
 
+        <!-- JDA logs to the console only (not the Discord webhook). Bump to "debug" to capture the
+             full voice handshake when diagnosing audio/voice-connection problems. -->
+        <Logger name="net.dv8tion" level="info" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
+
         <Root level="info">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="DiscordLoggingAppender"/>

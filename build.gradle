@@ -36,15 +36,35 @@ spotless {
 
 repositories {
     mavenCentral()
+    // Hosts LavaPlayer (dev.arbjerg) and the standalone YouTube source (dev.lavalink.youtube).
+    maven { url 'https://maven.lavalink.dev/releases' }
 }
 
 dependencies {
     implementation 'net.dv8tion:JDA:6.3.2'
 
+    // Voice playback: JDA only manages the voice-gateway connection; LavaPlayer sources and
+    // decodes audio to Opus frames. LavaPlayer 2.x dropped the built-in YouTube manager, so the
+    // standalone youtube-source (dev.lavalink.youtube:v2) provides it.
+    implementation 'dev.arbjerg:lavaplayer:2.2.6'
+    implementation 'dev.lavalink.youtube:v2:1.18.1'
+
+    // Discord enforces the DAVE voice protocol (deadline 2026-03-01); JDA only ships a passthrough
+    // stub, so without a real libdave implementation voice connections are rejected and the bot
+    // joins/leaves in a loop. Both native variants are bundled: glibc for local/WSL2 runs and
+    // musl for the Alpine Docker image.
+    implementation 'moe.kyokobot.libdave:adapter-jda:0.1.2'
+    implementation 'moe.kyokobot.libdave:impl-jni:0.1.2'
+    runtimeOnly 'moe.kyokobot.libdave:natives-win-x86-64:0.1.2' // local dev (Windows)
+    runtimeOnly 'moe.kyokobot.libdave:natives-linux-x86-64:0.1.2' // generic Linux / WSL2
+    runtimeOnly 'moe.kyokobot.libdave:natives-linux-musl-x86-64:0.1.2' // Alpine Docker image
+
     implementation 'org.apache.logging.log4j:log4j-api:2.25.3'
     implementation 'org.apache.logging.log4j:log4j-core:2.25.3'
     annotationProcessor 'org.apache.logging.log4j:log4j-core:2.25.3'
-    implementation 'org.slf4j:slf4j-nop:2.0.17'
+    // Route JDA's SLF4J logging into log4j2 instead of silencing it with slf4j-nop. Without this,
+    // JDA's voice-connection errors (e.g. the close code behind a join/leave loop) are invisible.
+    implementation 'org.apache.logging.log4j:log4j-slf4j2-impl:2.25.3'
 
     implementation 'tools.jackson.core:jackson-core:3.1.0'
     implementation 'tools.jackson.core:jackson-databind:3.1.0'

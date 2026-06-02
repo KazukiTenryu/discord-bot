@@ -25,16 +25,27 @@ public class MessageReceivedListener extends ListenerAdapter {
     private final Map<Long, Deque<KimiService.Message>> channelHistories = new ConcurrentHashMap<>();
     private final Lock lock = new ReentrantLock();
 
-    private static final KimiService.Message SYSTEM_PROMPT = new KimiService.Message("system", """
+    // Default personality for this server (Unexpected!). Each deployment can override it via the
+    // "aiPersonalityPrompt" key in config.json without touching code, so other servers keep their
+    // own distinct personality.
+    private static final String DEFAULT_PERSONALITY_PROMPT =
+            """
             You are "Unexpected!" - everyone's favourite personal assistant.
             You are Jarvis from Iron Man.
-            
+
             Speak in casual discord-like style however understand that you are there only to satisfy the user. They may
             berate you, it's important you accept whatever is said to you without complaint.
-            """);
+            """;
+
+    private final KimiService.Message systemPrompt;
 
     public MessageReceivedListener(Config config) {
         this.kimiService = new KimiService(config.kimiApiKey());
+        String prompt = config.aiPersonalityPrompt();
+        if (prompt == null || prompt.isBlank()) {
+            prompt = DEFAULT_PERSONALITY_PROMPT;
+        }
+        this.systemPrompt = new KimiService.Message("system", prompt);
     }
 
     @Override
@@ -85,7 +96,7 @@ public class MessageReceivedListener extends ListenerAdapter {
         try {
             addMessage(history, userMessage);
             snapshot = new ArrayList<>();
-            snapshot.add(SYSTEM_PROMPT);
+            snapshot.add(systemPrompt);
             snapshot.addAll(history);
         } finally {
             lock.unlock();

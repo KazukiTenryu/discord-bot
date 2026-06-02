@@ -4,10 +4,12 @@ import java.util.EnumSet;
 
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
+import net.dv8tion.jda.api.audio.AudioModuleConfig;
 import net.dv8tion.jda.api.events.session.ReadyEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.requests.restaction.CommandListUpdateAction;
+import net.dv8tion.jda.api.utils.cache.CacheFlag;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -21,6 +23,9 @@ import bot.database.Database;
 import bot.listeners.MessageReceivedListener;
 import bot.metrics.MetricService;
 import bot.slash.SlashCommandRepository;
+import bot.slash.music.PlayerManager;
+import moe.kyokobot.libdave.NativeDaveFactory;
+import moe.kyokobot.libdave.jda.LDJDADaveSessionFactory;
 
 public class Main {
     private static MetricService metricService;
@@ -36,9 +41,20 @@ public class Main {
             Database database = new Database("jdbc:sqlite:" + config.dbFile());
             metricService = new MetricService(database);
 
+            // Configure YouTube OAuth (if set) before any /play can reach the player.
+            PlayerManager.init(config.youtubeOauthRefreshToken());
+
             SlashCommandRepository slashCommandRepository = new SlashCommandRepository(config, database);
 
             JDA jda = JDABuilder.createLight(config.botToken(), EnumSet.allOf(GatewayIntent.class))
+                    // VOICE_STATE caching lets the music commands see which channel a member is in;
+                    // createLight() disables all cache flags by default.
+                    .enableCache(CacheFlag.VOICE_STATE)
+                    // Discord requires the DAVE protocol for voice; plug in the native libdave
+                    // implementation so audio connections aren't rejected. JDA's built-in factory is
+                    // only a non-functional passthrough.
+                    .setAudioModuleConfig(new AudioModuleConfig()
+                            .withDaveSessionFactory(new LDJDADaveSessionFactory(new NativeDaveFactory())))
                     .addEventListeners(new GlobalEventListener(config, database, slashCommandRepository))
                     .addEventListeners(new MessageReceivedListener(config))
                     .addEventListeners(new AutoModMessageListener(config, new ChannelHistory()))
