@@ -1,11 +1,11 @@
 package bot.slash.music;
 
 /** Small formatting helpers shared by the music commands. */
-final class MusicFormat {
+public final class MusicFormat {
     private MusicFormat() {}
 
     /** Formats a millisecond duration as {@code H:MM:SS} (hours omitted when zero). */
-    static String duration(long millis) {
+    public static String duration(long millis) {
         long totalSeconds = millis / 1000;
         long hours = totalSeconds / 3600;
         long minutes = (totalSeconds % 3600) / 60;

@@ -24,6 +24,8 @@ import bot.listeners.MessageReceivedListener;
 import bot.metrics.MetricService;
 import bot.slash.SlashCommandRepository;
 import bot.slash.music.PlayerManager;
+import bot.slash.playlist.PlaylistService;
+import bot.web.WebServer;
 import moe.kyokobot.libdave.NativeDaveFactory;
 import moe.kyokobot.libdave.jda.LDJDADaveSessionFactory;
 
@@ -44,7 +46,9 @@ public class Main {
             // Configure YouTube OAuth (if set) before any /play can reach the player.
             PlayerManager.init(config.youtubeOauthRefreshToken());
 
-            SlashCommandRepository slashCommandRepository = new SlashCommandRepository(config, database);
+            PlaylistService playlistService = new PlaylistService(database);
+            SlashCommandRepository slashCommandRepository =
+                    new SlashCommandRepository(config, database, playlistService);
 
             JDA jda = JDABuilder.createLight(config.botToken(), EnumSet.allOf(GatewayIntent.class))
                     // VOICE_STATE caching lets the music commands see which channel a member is in;
@@ -73,6 +77,10 @@ public class Main {
             CommandListUpdateAction commands = jda.updateCommands();
             slashCommandRepository.getCommands().forEach(slashCommand -> commands.addCommands(slashCommand.getData()));
             commands.queue();
+
+            // Serve the mobile playlist web player. Audio is streamed by the bot itself, reusing the
+            // music stack, so the server needs the same PlayerManager singleton initialised above.
+            new WebServer(playlistService, config.webPortOrDefault()).start();
         } catch (Exception e) {
             System.err.println("Failed to start application: " + e.getMessage());
         }

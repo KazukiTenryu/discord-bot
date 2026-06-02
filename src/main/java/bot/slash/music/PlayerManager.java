@@ -181,6 +181,95 @@ public class PlayerManager {
         });
     }
 
+    /**
+     * Resolves {@code query} (a URL or a {@code ytsearch:} term) to a single track's metadata without
+     * decoding any audio. Used by the playlist commands to capture title/author/uri/duration/artwork
+     * when a user adds a song. The returned future fails with {@link NoMatchException} when nothing
+     * matches, or with the load error otherwise.
+     */
+    public CompletableFuture<AudioTrackInfo> resolve(String query) {
+        CompletableFuture<AudioTrackInfo> future = new CompletableFuture<>();
+
+        audioPlayerManager.loadItem(query, new AudioLoadResultHandler() {
+            @Override
+            public void trackLoaded(AudioTrack track) {
+                future.complete(track.getInfo());
+            }
+
+            @Override
+            public void playlistLoaded(AudioPlaylist playlist) {
+                if (playlist.getTracks().isEmpty()) {
+                    future.completeExceptionally(new NoMatchException(query));
+                    return;
+                }
+                future.complete(playlist.getTracks().getFirst().getInfo());
+            }
+
+            @Override
+            public void noMatches() {
+                future.completeExceptionally(new NoMatchException(query));
+            }
+
+            @Override
+            public void loadFailed(FriendlyException exception) {
+                future.completeExceptionally(exception);
+            }
+        });
+
+        return future;
+    }
+
+    /**
+     * Resolves {@code identifier} and appends it to {@code guild}'s queue without posting any chat
+     * message (unlike {@link #loadAndPlay}). Used by {@code /play-playlist} to enqueue stored tracks
+     * in bulk; the returned future completes with the queued track (the first, for a playlist) or
+     * fails if nothing loads, so the caller can keep its own count of what made it in.
+     */
+    public CompletableFuture<AudioTrack> enqueue(Guild guild, String identifier) {
+        GuildMusicManager musicManager = getMusicManager(guild);
+        CompletableFuture<AudioTrack> future = new CompletableFuture<>();
+
+        audioPlayerManager.loadItemOrdered(musicManager, identifier, new AudioLoadResultHandler() {
+            @Override
+            public void trackLoaded(AudioTrack track) {
+                musicManager.getScheduler().queue(track);
+                future.complete(track);
+            }
+
+            @Override
+            public void playlistLoaded(AudioPlaylist playlist) {
+                if (playlist.getTracks().isEmpty()) {
+                    future.completeExceptionally(new NoMatchException(identifier));
+                    return;
+                }
+                AudioTrack first = playlist.isSearchResult()
+                        ? playlist.getTracks().getFirst()
+                        : null;
+                if (first != null) {
+                    musicManager.getScheduler().queue(first);
+                    future.complete(first);
+                    return;
+                }
+                for (AudioTrack track : playlist.getTracks()) {
+                    musicManager.getScheduler().queue(track);
+                }
+                future.complete(playlist.getTracks().getFirst());
+            }
+
+            @Override
+            public void noMatches() {
+                future.completeExceptionally(new NoMatchException(identifier));
+            }
+
+            @Override
+            public void loadFailed(FriendlyException exception) {
+                future.completeExceptionally(exception);
+            }
+        });
+
+        return future;
+    }
+
     /** A track resolved by {@link #downloadOgg} together with its rendered Ogg/Opus bytes. */
     public record DownloadedTrack(byte[] ogg, AudioTrackInfo info) {}
 

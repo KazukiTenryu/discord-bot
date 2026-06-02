@@ -5,6 +5,9 @@ services:
     build: .
     container_name: discord-bot
     restart: unless-stopped
+    # Playlist web player. Bound to localhost only — nginx will reverse-proxy / TLS-terminate it.
+    ports:
+      - "127.0.0.1:8080:8080"
     volumes:
       - ./config.json:/app/config.json:ro
       - ./bot.db:/app/bot.db

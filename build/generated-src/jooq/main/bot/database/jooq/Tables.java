@@ -3,14 +3,17 @@
  */
 package bot.database.jooq;
 
+
 import bot.database.jooq.tables.FlywaySchemaHistory;
 import bot.database.jooq.tables.Metrics;
+import bot.database.jooq.tables.Relationships;
 import bot.database.jooq.tables.UserNotes;
+
 
 /**
  * Convenience access to all tables in the default schema.
  */
-@SuppressWarnings({"all", "unchecked", "rawtypes", "this-escape"})
+@SuppressWarnings({ "all", "unchecked", "rawtypes", "this-escape" })
 public class Tables {
 
     /**
@@ -22,6 +25,11 @@ public class Tables {
      * The table <code>metrics</code>.
      */
     public static final Metrics METRICS = Metrics.METRICS;
+
+    /**
+     * The table <code>relationships</code>.
+     */
+    public static final Relationships RELATIONSHIPS = Relationships.RELATIONSHIPS;
 
     /**
      * The table <code>user_notes</code>.

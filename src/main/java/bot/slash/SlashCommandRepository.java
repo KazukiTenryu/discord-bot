@@ -19,6 +19,9 @@ import bot.slash.music.SongCommand;
 import bot.slash.music.StopCommand;
 import bot.slash.pet.*;
 import bot.slash.ping.PingCommand;
+import bot.slash.playlist.PlayPlaylistCommand;
+import bot.slash.playlist.PlaylistCommand;
+import bot.slash.playlist.PlaylistService;
 import bot.slash.rate.RateCommand;
 import bot.slash.rizz.RizzCommand;
 import bot.slash.rolemenu.RoleSelectCommand;
@@ -30,12 +33,12 @@ import bot.slash.wouldyourather.WouldYouRatherCommand;
 public class SlashCommandRepository {
     private final List<SlashCommand> commands;
 
-    public SlashCommandRepository(Config config, Database database) {
+    public SlashCommandRepository(Config config, Database database, PlaylistService playlistService) {
         this.commands = new ArrayList<>();
-        registerCommands(config, database);
+        registerCommands(config, database, playlistService);
     }
 
-    private void registerCommands(Config config, Database database) {
+    private void registerCommands(Config config, Database database, PlaylistService playlistService) {
         commands.add(new PingCommand());
 
         commands.add(new RateCommand());
@@ -66,6 +69,9 @@ public class SlashCommandRepository {
         commands.add(new QueueCommand());
         commands.add(new NowPlayingCommand());
         commands.add(new LyricsCommand());
+
+        commands.add(new PlaylistCommand(playlistService));
+        commands.add(new PlayPlaylistCommand(playlistService));
 
         commands.addAll(ActionCommand.registerActionCommands(new HandleCommandAction(config)));
     }

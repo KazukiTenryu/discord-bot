@@ -6,6 +6,7 @@ import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 
@@ -16,6 +17,7 @@ import bot.config.Config;
 import bot.database.Database;
 import bot.slash.SlashCommand;
 import bot.slash.SlashCommandRepository;
+import bot.slash.playlist.PlaylistControls;
 
 public class GlobalEventListener extends ListenerAdapter {
     private static final Logger LOGGER = LogManager.getLogger(GlobalEventListener.class);
@@ -66,6 +68,29 @@ public class GlobalEventListener extends ListenerAdapter {
             optionalSlashCommand.ifPresent(slashCommand -> slashCommand.onAutoComplete(event));
         } catch (Exception e) {
             LOGGER.error("Failed to handle autocomplete for /{}", name, e);
+        }
+    }
+
+    @Override
+    public void onButtonInteraction(ButtonInteractionEvent event) {
+        String componentId = event.getComponentId();
+        if (!componentId.startsWith("playlist:") || event.getGuild() == null) {
+            return;
+        }
+
+        try {
+            String reply =
+                    switch (componentId) {
+                        case PlaylistControls.TOGGLE_ID -> PlaylistControls.toggle(event.getGuild());
+                        case PlaylistControls.SKIP_ID -> PlaylistControls.skip(event.getGuild());
+                        case PlaylistControls.STOP_ID -> PlaylistControls.stop(event.getGuild());
+                        default -> null;
+                    };
+            if (reply != null) {
+                event.reply(reply).setEphemeral(true).queue();
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to handle playlist button {}", componentId, e);
         }
     }
 

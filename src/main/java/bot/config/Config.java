@@ -23,4 +23,15 @@ public record Config(
         // Server-specific rules shown by /rules, one entry per rule block. Falls back to a built-in
         // default (see RulesCommand) when absent/empty.
         @JsonProperty("rules") List<String> rules,
-        @JsonProperty("autoModIgnoredChannels") List<String> autoModIgnoredChannels) {}
+        @JsonProperty("autoModIgnoredChannels") List<String> autoModIgnoredChannels,
+        // Port for the playlist web player (bot.web.WebServer). Falls back to a built-in default
+        // (see Config#webPortOrDefault) when absent, so existing deployments need no config change.
+        @JsonProperty("webPort") Integer webPort) {
+
+    private static final int DEFAULT_WEB_PORT = 8080;
+
+    /** The configured web port, or the built-in default when unset. */
+    public int webPortOrDefault() {
+        return webPort == null ? DEFAULT_WEB_PORT : webPort;
+    }
+}

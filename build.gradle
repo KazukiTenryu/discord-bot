@@ -108,10 +108,43 @@ jooq {
 
 sourceSets.main.java.srcDirs += 'build/generated-src/jooq/main'
 
+// Isolated source set for the Flyway runner. It only sees Flyway + the JDBC driver (via the
+// inherited 'implementation' dependencies); the app's compiled/generated classes are NOT on its
+// classpath, so it builds independently of jOOQ code generation.
+sourceSets {
+    migration {
+        java.srcDir 'src/migration/java'
+    }
+}
+
+// The runner only needs Flyway, the JDBC driver, and Flyway's Jackson dependency — not the app's
+// full dependency tree. Keep this classpath minimal and independent of 'implementation'.
+dependencies {
+    migrationImplementation 'org.flywaydb:flyway-core:12.2.0'
+    migrationImplementation 'org.xerial:sqlite-jdbc:3.51.3.0'
+    migrationImplementation 'tools.jackson.core:jackson-databind:3.1.0'
+    migrationRuntimeOnly 'org.slf4j:slf4j-nop:2.0.17'
+}
+
+// Applies all migrations to bot.db so jOOQ can generate from a real, up-to-date schema. Works on a
+// fresh checkout too: SQLite creates the file and Flyway applies V1..Vn from scratch.
 tasks.register('migrateDb', JavaExec) {
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'org.flywaydb.core.Flyway'
-    args = ['migrate']
+    group = 'database'
+    description = 'Apply Flyway migrations to bot.db before code generation'
+    dependsOn tasks.named('compileMigrationJava')
+    classpath = sourceSets.migration.runtimeClasspath
+    mainClass = 'MigrateDb'
+    args = ['bot.db', 'src/main/resources/db']
+}
+
+// Full chain on any build: compileJava -> generateJooq -> migrateDb. This guarantees the schema is
+// migrated and the jOOQ classes are generated before compilation, so a clean checkout builds in one
+// step with no manual bootstrap.
+tasks.named('generateJooq').configure {
+    dependsOn tasks.named('migrateDb')
+}
+tasks.named('compileJava').configure {
+    dependsOn tasks.named('generateJooq')
 }
 
 tasks.withType(JavaCompile).configureEach {

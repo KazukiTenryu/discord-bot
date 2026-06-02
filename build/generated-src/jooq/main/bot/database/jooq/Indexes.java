@@ -3,26 +3,27 @@
  */
 package bot.database.jooq;
 
+
+import bot.database.jooq.tables.FlywaySchemaHistory;
+import bot.database.jooq.tables.Relationships;
+
 import org.jooq.Index;
 import org.jooq.OrderField;
 import org.jooq.impl.DSL;
 import org.jooq.impl.Internal;
 
-import bot.database.jooq.tables.FlywaySchemaHistory;
 
 /**
  * A class modelling indexes of tables in the default schema.
  */
-@SuppressWarnings({"all", "unchecked", "rawtypes", "this-escape"})
+@SuppressWarnings({ "all", "unchecked", "rawtypes", "this-escape" })
 public class Indexes {
 
     // -------------------------------------------------------------------------
     // INDEX definitions
     // -------------------------------------------------------------------------
 
-    public static final Index FLYWAY_SCHEMA_HISTORY_S_IDX = Internal.createIndex(
-            DSL.name("flyway_schema_history_s_idx"),
-            FlywaySchemaHistory.FLYWAY_SCHEMA_HISTORY,
-            new OrderField[] {FlywaySchemaHistory.FLYWAY_SCHEMA_HISTORY.SUCCESS},
-            false);
+    public static final Index FLYWAY_SCHEMA_HISTORY_S_IDX = Internal.createIndex(DSL.name("flyway_schema_history_s_idx"), FlywaySchemaHistory.FLYWAY_SCHEMA_HISTORY, new OrderField[] { FlywaySchemaHistory.FLYWAY_SCHEMA_HISTORY.SUCCESS }, false);
+    public static final Index IDX_RELATIONSHIPS_A = Internal.createIndex(DSL.name("idx_relationships_a"), Relationships.RELATIONSHIPS, new OrderField[] { Relationships.RELATIONSHIPS.GUILD_ID, Relationships.RELATIONSHIPS.A_USER_ID }, false);
+    public static final Index IDX_RELATIONSHIPS_B = Internal.createIndex(DSL.name("idx_relationships_b"), Relationships.RELATIONSHIPS, new OrderField[] { Relationships.RELATIONSHIPS.GUILD_ID, Relationships.RELATIONSHIPS.B_USER_ID }, false);
 }

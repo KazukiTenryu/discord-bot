@@ -23,4 +23,7 @@ USER botuser
 
 ENV DB_FILE=/app/data/bot.db
 
+# Playlist web player (bot.web.WebServer); override the port via the "webPort" config key.
+EXPOSE 8080
+
 ENTRYPOINT ["java", "-jar", "app.jar"]
