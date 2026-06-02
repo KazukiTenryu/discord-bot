@@ -167,6 +167,25 @@
   .ctrl.play svg { width: 24px; height: 24px; }
   .times { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-bottom: 6px; font-variant-numeric: tabular-nums; }
 
+  .volume { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .volume .vbtn {
+    border: 0; background: transparent; color: var(--muted);
+    width: 30px; height: 30px; flex: 0 0 auto;
+    display: grid; place-items: center; cursor: pointer; padding: 0;
+  }
+  .volume .vbtn svg { width: 20px; height: 20px; fill: currentColor; }
+  .vol {
+    -webkit-appearance: none; appearance: none;
+    flex: 1 1 auto; height: 4px; border-radius: 4px;
+    background: var(--line); cursor: pointer;
+    accent-color: var(--accent);
+  }
+  .vol::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 13px; height: 13px; border-radius: 50%; background: var(--accent);
+  }
+  .vol::-moz-range-thumb { width: 13px; height: 13px; border: 0; border-radius: 50%; background: var(--accent); }
+
   .toast {
     position: fixed;
     left: 50%; bottom: calc(var(--player-h) + 20px + env(safe-area-inset-bottom));
@@ -214,6 +233,12 @@
         </button>
       </div>
     </div>
+    <div class="volume">
+      <button class="vbtn" id="mute" aria-label="Mute">
+        <svg viewBox="0 0 24 24"><path id="volIcon" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4.03v8.06A4.5 4.5 0 0 0 16.5 12zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06a9 9 0 0 0 0-17.54z"/></svg>
+      </button>
+      <input type="range" class="vol" id="vol" min="0" max="100" value="100" step="1" aria-label="Volume" />
+    </div>
   </div>
 
   <audio id="audio" preload="none"></audio>
@@ -239,9 +264,16 @@
   const curEl = document.getElementById("cur");
   const durEl = document.getElementById("dur");
   const toastEl = document.getElementById("toast");
+  const volSlider = document.getElementById("vol");
+  const muteBtn = document.getElementById("mute");
+  const volIcon = document.getElementById("volIcon");
 
   const PLAY_PATH = "M8 5v14l11-7z";
   const PAUSE_PATH = "M6 5h4v14H6zm8 0h4v14h-4z";
+  // Speaker icons by level: muted (x), low (no waves), high (two waves).
+  const VOL_MUTE = "M3 9v6h4l5 5V4L7 9H3zm18.5 3-2 2 1.5 1.5L19.5 16l-2-2 2-2L18 10.5l-2 2-2-2L12.5 12l2 2-2 2 1.5 1.5 2-2z";
+  const VOL_LOW = "M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4.03v8.06A4.5 4.5 0 0 0 16.5 12z";
+  const VOL_HIGH = "M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4.03v8.06A4.5 4.5 0 0 0 16.5 12zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06a9 9 0 0 0 0-17.54z";
   const FALLBACK_ART =
     "data:image/svg+xml;utf8," +
     encodeURIComponent(
@@ -367,7 +399,7 @@
     pArt.src = t.thumbnailUrl || FALLBACK_ART;
     pArt.onerror = () => { pArt.src = FALLBACK_ART; };
     player.classList.add("active");
-    document.body.style.setProperty("--player-h", "150px");
+    document.body.style.setProperty("--player-h", "194px");
     highlight();
     if ("mediaSession" in navigator) {
       navigator.mediaSession.metadata = new MediaMetadata({ title: t.title, artist: t.author || "" });
@@ -415,6 +447,31 @@
     navigator.mediaSession.setActionHandler("previoustrack", prev);
     navigator.mediaSession.setActionHandler("nexttrack", next);
   }
+
+  // ---- volume ----------------------------------------------------------------
+  // Note: iOS Safari ignores audio.volume (the OS hardware buttons own it), so the
+  // slider is cosmetic there but works on desktop and Android.
+  let lastVolume = 100; // remembers level for un-muting
+
+  function applyVolume(pct, persist) {
+    pct = Math.max(0, Math.min(100, Math.round(pct)));
+    audio.volume = pct / 100;
+    audio.muted = pct === 0;
+    volSlider.value = pct;
+    volIcon.setAttribute("d", pct === 0 ? VOL_MUTE : pct < 50 ? VOL_LOW : VOL_HIGH);
+    muteBtn.setAttribute("aria-label", pct === 0 ? "Unmute" : "Mute");
+    if (pct > 0) lastVolume = pct;
+    if (persist) { try { localStorage.setItem("volume", String(pct)); } catch (e) {} }
+  }
+
+  volSlider.addEventListener("input", () => applyVolume(Number(volSlider.value), true));
+  muteBtn.addEventListener("click", () => {
+    applyVolume(audio.volume > 0 && !audio.muted ? 0 : lastVolume, true);
+  });
+
+  let saved = 100;
+  try { const v = localStorage.getItem("volume"); if (v !== null) saved = Number(v); } catch (e) {}
+  applyVolume(isFinite(saved) ? saved : 100, false);
 
   // Open a specific playlist directly when linked with ?user=<id> (e.g. from /playlist show).
   async function openUserById(userId) {
