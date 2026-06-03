@@ -832,6 +832,7 @@
     view.innerHTML = trackSkeleton();
     try {
       const tracks = await getJSON("/api/users/" + encodeURIComponent(user.userId) + "/tracks");
+      tracks.reverse(); // API returns oldest-first (id asc); show newest added at the top
       if (!tracks.length) { view.innerHTML = '<div class="empty">This playlist is empty.</div>'; return; }
       const canEdit = !!me && String(user.userId) === String(me.userId);
       const list = document.createElement("div");
