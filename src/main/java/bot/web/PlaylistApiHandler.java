@@ -6,12 +6,14 @@ import java.io.OutputStream;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.Optional;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -35,10 +37,12 @@ import tools.jackson.databind.ObjectMapper;
  * <ul>
  *   <li>{@code GET /api/users} — every user with a playlist (id, name, track count)
  *   <li>{@code GET /api/users/{userId}/tracks} — that user's tracks in order
+ *   <li>{@code GET /api/users/{userId}/download} — the whole playlist as a {@code .zip} of {@code .ogg} files
  *   <li>{@code GET /api/tracks/{id}/audio} — the track decoded to Ogg/Opus, streamed to the browser
  *       ({@code ?download} sends it as a {@code .ogg} attachment instead)
  *   <li>{@code GET /api/lyrics?title=&artist=} — plain lyrics from lrclib.net, or 404 if none match
  *   <li>{@code GET /api/search?q=…} — search results' metadata (no audio decoded)
+ *   <li>{@code GET /api/preview?uri=…} — stream a search result by URI (preview before adding)
  *   <li>{@code GET /api/me} (token) — the calling user's id and name
  *   <li>{@code POST /api/playlist/tracks} (token, body {@code {"uri": …}}) — add a track to the caller's playlist
  *   <li>{@code DELETE /api/playlist/tracks/{id}} (token) — remove one of the caller's tracks
@@ -69,6 +73,13 @@ public class PlaylistApiHandler implements HttpHandler {
     private final Map<Integer, byte[]> audioCache = Collections.synchronizedMap(new LinkedHashMap<>(16, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<Integer, byte[]> eldest) {
+            return size() > AUDIO_CACHE_MAX;
+        }
+    });
+    // Search-result previews are streamed by URI (the track isn't stored yet), cached separately.
+    private final Map<String, byte[]> previewCache = Collections.synchronizedMap(new LinkedHashMap<>(16, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, byte[]> eldest) {
             return size() > AUDIO_CACHE_MAX;
         }
     });
@@ -115,6 +126,10 @@ public class PlaylistApiHandler implements HttpHandler {
             handleLyrics(exchange);
             return;
         }
+        if (path.equals("/api/preview")) {
+            handlePreview(exchange);
+            return;
+        }
         if (path.equals("/api/me")) {
             TokenOwner owner = authenticate(exchange);
             if (owner == null) {
@@ -128,6 +143,12 @@ public class PlaylistApiHandler implements HttpHandler {
         if (path.startsWith("/api/users/") && path.endsWith("/tracks")) {
             String userId = path.substring("/api/users/".length(), path.length() - "/tracks".length());
             sendJson(exchange, playlistService.getTracks(userId));
+            return;
+        }
+        // /api/users/{userId}/download — the whole playlist as a .zip of .ogg files
+        if (path.startsWith("/api/users/") && path.endsWith("/download")) {
+            String userId = path.substring("/api/users/".length(), path.length() - "/download".length());
+            handlePlaylistDownload(exchange, userId);
             return;
         }
         // /api/tracks/{id}/audio
@@ -189,10 +210,36 @@ public class PlaylistApiHandler implements HttpHandler {
             return;
         }
         LyricsService.Lyrics found = lyrics.get();
-        sendJson(exchange, Map.of(
-                "trackName", found.trackName(),
-                "artistName", found.artistName(),
-                "plainLyrics", found.plainLyrics()));
+        sendJson(
+                exchange,
+                Map.of(
+                        "trackName", found.trackName(),
+                        "artistName", found.artistName(),
+                        "plainLyrics", found.plainLyrics()));
+    }
+
+    /** Streams a search result by its URI so the user can preview it before adding (no DB row needed). */
+    private void handlePreview(HttpExchange exchange) throws IOException {
+        String uri = queryParam(exchange, "uri");
+        if (uri == null || uri.isBlank()) {
+            sendText(exchange, 400, "Missing 'uri'.");
+            return;
+        }
+        byte[] audio = previewCache.get(uri);
+        if (audio == null) {
+            try {
+                audio = PlayerManager.getInstance()
+                        .downloadOgg(uri)
+                        .get(DECODE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                        .ogg();
+            } catch (Exception e) {
+                LOGGER.warn("Couldn't decode preview {}", uri, e);
+                sendText(exchange, 502, "Couldn't play that track.");
+                return;
+            }
+            previewCache.put(uri, audio);
+        }
+        sendAudio(exchange, audio);
     }
 
     private void handleAddTrack(HttpExchange exchange) throws IOException {
@@ -283,6 +330,55 @@ public class PlaylistApiHandler implements HttpHandler {
         return lower.startsWith("http://") || lower.startsWith("https://");
     }
 
+    /**
+     * Streams the whole playlist as a {@code .zip} of {@code .ogg} files. Tracks are decoded and zipped
+     * on the fly (chunked response). Tracks that can't be decoded (e.g. broken YouTube) are skipped so
+     * the rest still download. The response code is committed up front, so failures only drop entries.
+     */
+    private void handlePlaylistDownload(HttpExchange exchange, String userId) throws IOException {
+        List<StoredTrack> tracks = playlistService.getTracks(userId);
+        if (tracks.isEmpty()) {
+            sendText(exchange, 404, "Empty playlist.");
+            return;
+        }
+        String owner = playlistService.listOwners().stream()
+                .filter(o -> o.userId().equals(userId))
+                .map(PlaylistService.PlaylistOwner::userName)
+                .findFirst()
+                .orElse("playlist");
+        String zipName = safeFilename(owner) + " playlist.zip";
+        String encoded = URLEncoder.encode(zipName, StandardCharsets.UTF_8).replace("+", "%20");
+
+        exchange.getResponseHeaders().set("Content-Type", "application/zip");
+        exchange.getResponseHeaders()
+                .set(
+                        "Content-Disposition",
+                        "attachment; filename=\"" + zipName.replaceAll("[^\\x20-\\x7e]", "_") + "\"; filename*=UTF-8''"
+                                + encoded);
+        exchange.sendResponseHeaders(200, 0); // 0 → chunked; we close the stream when done
+
+        int n = 1, ok = 0;
+        try (ZipOutputStream zip = new ZipOutputStream(exchange.getResponseBody())) {
+            for (StoredTrack track : tracks) {
+                byte[] ogg;
+                try {
+                    ogg = audioFor(track);
+                } catch (Exception e) {
+                    LOGGER.warn(
+                            "Skipping un-downloadable track {} ({}) in zip for {}", track.id(), track.uri(), userId);
+                    n++;
+                    continue;
+                }
+                zip.putNextEntry(new ZipEntry(String.format("%02d - %s.ogg", n, safeFilename(track.title()))));
+                zip.write(ogg);
+                zip.closeEntry();
+                n++;
+                ok++;
+            }
+        }
+        LOGGER.info("Zipped {}/{} tracks for {}'s playlist download", ok, tracks.size(), owner);
+    }
+
     private void handleAudio(HttpExchange exchange, String idPart) throws IOException {
         int id;
         try {
@@ -321,9 +417,11 @@ public class PlaylistApiHandler implements HttpHandler {
         // Both filename (ASCII fallback) and RFC 5987 filename* (UTF-8) so non-ASCII titles survive.
         String encoded = URLEncoder.encode(name, StandardCharsets.UTF_8).replace("+", "%20");
         exchange.getResponseHeaders().set("Content-Type", "audio/ogg");
-        exchange.getResponseHeaders().set(
-                "Content-Disposition",
-                "attachment; filename=\"" + name.replaceAll("[^\\x20-\\x7e]", "_") + "\"; filename*=UTF-8''" + encoded);
+        exchange.getResponseHeaders()
+                .set(
+                        "Content-Disposition",
+                        "attachment; filename=\"" + name.replaceAll("[^\\x20-\\x7e]", "_") + "\"; filename*=UTF-8''"
+                                + encoded);
         exchange.sendResponseHeaders(200, audio.length);
         try (OutputStream out = exchange.getResponseBody()) {
             out.write(audio);

@@ -87,7 +87,7 @@
   .modal-hint { text-align: center; color: var(--muted); font-size: 12.5px; margin-top: 14px; }
 
   /* user grid */
-  .users { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+  .users { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; max-width: 1100px; margin: 0 auto; }
   .user {
     background: linear-gradient(160deg, var(--bg-card), var(--bg-elev));
     border: 1px solid var(--line); border-radius: 16px; padding: 20px 16px;
@@ -111,7 +111,7 @@
     position: absolute; left: 0; right: 0; top: -120px; height: 460px; z-index: -1;
     background: linear-gradient(to bottom, hsl(var(--hue) 52% 36%) 0%, hsl(var(--hue) 38% 20%) 46%, rgba(10,10,15,0) 100%);
   }
-  .banner-inner { display: flex; align-items: flex-end; gap: 24px; padding-top: 26px; }
+  .banner-inner { display: flex; align-items: flex-end; gap: 24px; padding-top: 26px; max-width: 1100px; margin: 0 auto; }
   .banner-cover {
     width: 196px; height: 196px; flex: 0 0 auto; border-radius: 8px; overflow: hidden;
     box-shadow: 0 18px 44px rgba(0,0,0,0.5);
@@ -148,6 +148,33 @@
     .banner-stats, .banner-actions { justify-content: center; }
     .banner-meta h1.bn { margin: 12px 0; }
   }
+
+  /* desktop content container — caps width while gradients/banners stay full-bleed */
+  .container { max-width: 1100px; margin: 0 auto; }
+
+  /* in-playlist filter: a button that reveals a field (filters visible rows; not a song search) */
+  .pl-tools { margin: 2px 4px 14px; }
+  .pl-toolbar { display: flex; align-items: center; gap: 10px; }
+  .pl-filter-btn {
+    border: 0; background: var(--bg-card); color: var(--muted);
+    width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center;
+    cursor: pointer; flex: 0 0 auto; transition: transform .12s var(--ease), background .12s ease, color .12s ease;
+  }
+  .pl-filter-btn:hover { color: var(--text); background: var(--bg-elev); }
+  .pl-filter-btn:active { transform: scale(.9); }
+  .pl-tools.open .pl-filter-btn { color: var(--accent); }
+  .pl-filter-btn svg { width: 20px; height: 20px; fill: currentColor; }
+  .pl-filter { position: relative; width: 300px; max-width: 0; opacity: 0; overflow: hidden; transition: max-width .28s var(--ease), opacity .18s ease; }
+  .pl-tools.open .pl-filter { max-width: 300px; opacity: 1; }
+  .pl-filter svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; fill: var(--muted); pointer-events: none; }
+  .pl-filter input {
+    width: 100%; background: var(--bg-card); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 9px 14px 9px 38px; font-size: 14px; outline: none;
+    -webkit-appearance: none; appearance: none; transition: border-color .15s ease;
+  }
+  .pl-filter input::placeholder { color: var(--muted); }
+  .pl-filter input:focus { border-color: var(--accent); }
+  .pl-empty { color: var(--muted); padding: 22px 4px; font-size: 14px; }
 
   /* search results — centered column */
   .search-results { max-width: 720px; margin: 0 auto; }
@@ -257,6 +284,7 @@
     overflow: hidden;
   }
   body.np-open .np { transform: translateY(0); }
+  .np-inner { display: contents; } /* mobile: transparent — desktop turns it into the centred grid */
   .np-bg {
     position: absolute; inset: -20% ; z-index: -1;
     background-size: cover; background-position: center;
@@ -347,13 +375,18 @@
 
     .np {
       inset: auto 0 0 0; height: 100px;
-      display: grid;
-      grid-template-columns: minmax(200px, 1fr) minmax(420px, 2.2fr) minmax(200px, 1fr);
-      align-items: center; gap: 20px;
-      padding: 12px 22px; overflow: visible;
+      display: flex; align-items: center; justify-content: center;
+      padding: 10px 22px 20px; overflow: visible;
       background: #16161f; border-top: 1px solid var(--line);
       transform: translateY(120%);                 /* hidden until a track loads */
       transition: transform .35s var(--ease);
+    }
+    /* contents → real grid, capped and centred to match the page container */
+    .np-inner {
+      display: grid;
+      grid-template-columns: minmax(200px, 1fr) minmax(420px, 2.2fr) minmax(200px, 1fr);
+      align-items: center; gap: 20px;
+      width: 100%; max-width: 1100px; margin: 0 auto;
     }
     body.has-track { padding-bottom: calc(100px + 28px + env(safe-area-inset-bottom)); }
     body.has-track .np { transform: none; }
@@ -461,6 +494,7 @@
       <div class="spacer"></div>
     </div>
 
+    <div class="np-inner">
     <div class="np-l">
       <div class="np-stage"><img class="np-art" id="npArt" alt="" /></div>
       <div class="np-info">
@@ -495,6 +529,7 @@
         </div>
       </div>
     </div>
+    </div><!-- /np-inner -->
 
     <!-- lyrics overlay -->
     <div class="lyrics" id="lyrics">
@@ -676,12 +711,65 @@
       });
       view.innerHTML = "";
       view.appendChild(buildBanner(user, tracks));
-      view.appendChild(list);
+
+      const container = document.createElement("div");
+      container.className = "container";
+      if (tracks.length > 5) container.appendChild(buildPlaylistFilter(list));
+      container.appendChild(list);
+      view.appendChild(container);
+
       highlight();
       updateHeaderScroll();
     } catch (e) {
       view.innerHTML = '<div class="empty">Couldn\'t load this playlist.</div>';
     }
+  }
+
+  // A filter button that reveals a field to hide non-matching rows in the current playlist
+  // (client-side row filtering, not a song search).
+  function buildPlaylistFilter(list) {
+    const tools = document.createElement("div");
+    tools.className = "pl-tools";
+
+    const SEARCH_SVG = '<svg viewBox="0 0 24 24"><path d="M10 4a6 6 0 0 1 4.6 9.85l5.27 5.28-1.42 1.41-5.27-5.27A6 6 0 1 1 10 4zm0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>';
+    const btn = document.createElement("button");
+    btn.className = "pl-filter-btn"; btn.setAttribute("aria-label", "Find in playlist");
+    btn.innerHTML = SEARCH_SVG;
+
+    const field = document.createElement("div");
+    field.className = "pl-filter";
+    field.innerHTML = SEARCH_SVG +
+      '<input type="search" enterkeyhint="search" autocomplete="off" placeholder="Search in playlist" aria-label="Filter this playlist" />';
+
+    const empty = document.createElement("div");
+    empty.className = "pl-empty"; empty.style.display = "none"; empty.textContent = "No matching songs.";
+
+    const input = field.querySelector("input");
+    const apply = () => {
+      const q = input.value.trim().toLowerCase();
+      let any = false;
+      list.querySelectorAll(".track").forEach((row) => {
+        const show = !q || (row.dataset.search || "").includes(q);
+        row.style.display = show ? "" : "none";
+        if (show) any = true;
+      });
+      empty.style.display = any ? "none" : "";
+    };
+    input.addEventListener("input", apply);
+    // Collapse again when the user tabs/clicks away with nothing typed.
+    input.addEventListener("blur", () => { if (!input.value.trim()) tools.classList.remove("open"); });
+    input.addEventListener("keydown", (e) => { if (e.key === "Escape") { input.value = ""; apply(); tools.classList.remove("open"); input.blur(); } });
+    btn.addEventListener("click", () => {
+      const open = tools.classList.toggle("open");
+      if (open) setTimeout(() => input.focus(), 60);
+      else { input.value = ""; apply(); }
+    });
+
+    const row = document.createElement("div");
+    row.className = "pl-toolbar";
+    row.appendChild(btn); row.appendChild(field);
+    tools.appendChild(row); tools.appendChild(empty);
+    return tools;
   }
 
   // Deterministic hue per playlist so each user gets a consistent, distinct banner colour.
@@ -729,7 +817,17 @@
     shuf.className = "shuffle-lg" + (shuffle ? " on" : ""); shuf.setAttribute("aria-label", "Shuffle play");
     shuf.innerHTML = '<svg viewBox="0 0 24 24"><path d="M10.6 9.2 5.4 4 4 5.4l5.2 5.2zM14.5 4l2 2L4 18.6 5.4 20 18 7.5l2 2V4zm.3 9.4-1.4 1.4 3.1 3.2L14.5 20H20v-5.5l-2 2z"/></svg>';
     shuf.addEventListener("click", () => { setShuffle(true); queue = tracks; playlistName = user.userName; playAt(pickRandom0()); });
-    meta.appendChild(actions); actions.appendChild(play); actions.appendChild(shuf);
+    const dlAll = document.createElement("button");
+    dlAll.className = "shuffle-lg"; dlAll.setAttribute("aria-label", "Download playlist as .zip"); dlAll.title = "Download all (.zip)";
+    dlAll.innerHTML = '<svg viewBox="0 0 24 24"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>';
+    dlAll.addEventListener("click", () => {
+      const a = document.createElement("a");
+      a.href = "/api/users/" + encodeURIComponent(user.userId) + "/download";
+      a.download = user.userName + " playlist.zip";
+      document.body.appendChild(a); a.click(); a.remove();
+      toast("Zipping “" + user.userName + "”’s playlist — this can take a moment…");
+    });
+    meta.appendChild(actions); actions.appendChild(play); actions.appendChild(shuf); actions.appendChild(dlAll);
 
     const inner = document.createElement("div");
     inner.className = "banner-inner";
@@ -752,6 +850,7 @@
     img.onerror = () => { img.src = FALLBACK_ART; };
     row.querySelector(".title").textContent = t.title;
     row.querySelector(".author").textContent = t.author || "";
+    row.dataset.search = ((t.title || "") + " " + (t.author || "")).toLowerCase(); // for in-playlist filtering
     if (idx != null) row.querySelector(".idx").dataset.n = idx; // so highlight() can restore the number
     return row;
   }
@@ -798,13 +897,15 @@
 
     const list = document.createElement("div");
     list.className = "tracks";
-    results.forEach((t) => {
+    results.forEach((t, i) => {
       const row = buildTrackRow(t, null);
       row.querySelector(".idx").remove();
+      // Click the row to preview the song (without adding); the + button adds it.
+      row.addEventListener("click", () => { queue = results; playlistName = "Search results"; playAt(i); });
       const btn = document.createElement("button");
       btn.className = "rowbtn"; btn.setAttribute("aria-label", "Add to playlist");
       btn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>';
-      btn.addEventListener("click", () => addToPlaylist(t, btn));
+      btn.addEventListener("click", (e) => { e.stopPropagation(); addToPlaylist(t, btn); });
       row.appendChild(btn);
       list.appendChild(row);
     });
@@ -909,7 +1010,8 @@
     if (i < 0 || i >= queue.length) return;
     index = i;
     const t = queue[i];
-    audio.src = "/api/tracks/" + t.id + "/audio";
+    // Stored tracks stream by id; search-result previews (no id) stream by URI.
+    audio.src = t.id != null ? "/api/tracks/" + t.id + "/audio" : "/api/preview?uri=" + encodeURIComponent(t.uri);
     audio.play().catch(() => {});
     renderTrack(t);
     document.body.classList.add("has-track");
