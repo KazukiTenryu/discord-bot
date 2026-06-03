@@ -14,6 +14,13 @@ shadowJar {
     archiveBaseName.set('app')
     archiveClassifier.set('')
     archiveVersion.set('')
+    // The fat jar contains TWO Log4j2Plugins.dat descriptors — log4j-core's and the one generated
+    // for our custom bot.logging.DiscordLoggingAppender. Without merging them, one overwrites the
+    // other, Log4j2 can't resolve all plugins, and it silently falls back to a minimal default config
+    // (so INFO/WARN app logs vanish in the Docker jar while working fine from the IDE/exploded build).
+    // This transformer merges the descriptors; mergeServiceFiles() does the same for META-INF/services.
+    mergeServiceFiles()
+    transform(com.github.jengelman.gradle.plugins.shadow.transformers.Log4j2PluginsCacheFileTransformer)
 }
 
 tasks.withType(JavaCompile).configureEach {
