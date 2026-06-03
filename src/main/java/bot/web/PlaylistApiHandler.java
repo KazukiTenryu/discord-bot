@@ -39,6 +39,7 @@ import bot.slash.playlist.SpotifyService;
 import bot.slash.playlist.SpotifyService.SpotifyPlaylist;
 import bot.slash.playlist.SpotifyService.SpotifyTrack;
 import bot.slash.playlist.SpotifyService.Tokens;
+import bot.utils.DiscoverService;
 import bot.utils.LyricsService;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -112,6 +113,7 @@ public class PlaylistApiHandler implements HttpHandler {
     // At most one running import per user, keyed by Discord user id.
     private final Map<String, ImportProgress> imports = new ConcurrentHashMap<>();
     private final LyricsService lyricsService = new LyricsService();
+    private final DiscoverService discoverService = new DiscoverService();
     private final Map<Integer, byte[]> audioCache = Collections.synchronizedMap(new LinkedHashMap<>(16, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<Integer, byte[]> eldest) {
@@ -197,6 +199,10 @@ public class PlaylistApiHandler implements HttpHandler {
         }
         if (path.equals("/api/search")) {
             handleSearch(exchange);
+            return;
+        }
+        if (path.equals("/api/discover")) {
+            sendJson(exchange, discoverService.discover());
             return;
         }
         if (path.equals("/api/lyrics")) {

@@ -252,6 +252,118 @@
   .spotify-btn:hover { background: rgba(29,185,84,0.2); }
   .spotify-btn:active { transform: scale(.97); }
 
+  /* ---------- Discover ---------- */
+  /* Promo banner shown atop the listeners home, and a matching desktop rail entry. */
+  .disc-banner {
+    display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; cursor: pointer;
+    margin: 4px 0 26px; padding: 18px 22px; border-radius: 18px; border: 1px solid var(--line);
+    color: var(--text); position: relative; overflow: hidden;
+    background:
+      radial-gradient(130% 180% at 0% 0%, hsl(282 72% 32% / .5), transparent 55%),
+      radial-gradient(130% 180% at 100% 120%, var(--accent-soft), transparent 60%),
+      linear-gradient(120deg, var(--panel-2), var(--surface));
+    transition: transform .16s var(--ease), border-color .18s ease;
+  }
+  .disc-banner:hover { transform: translateY(-2px); border-color: var(--line-strong); }
+  .disc-banner-txt { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .disc-banner-k { font-family: "DM Mono", monospace; font-size: 11px; letter-spacing: .22em; text-transform: uppercase; color: var(--accent-bright); }
+  .disc-banner-t { font-family: var(--font-display); font-size: 19px; font-weight: 600; letter-spacing: -.01em; }
+  .disc-banner-arrow { width: 26px; height: 26px; flex: 0 0 auto; fill: var(--muted); transition: transform .2s var(--ease), fill .2s ease; }
+  .disc-banner:hover .disc-banner-arrow { transform: translateX(4px); fill: var(--accent-bright); }
+
+  .discover { display: flex; flex-direction: column; gap: 32px; min-width: 0; }
+
+  /* Hero: the #1 trending track, with its own art blurred into the backdrop + a hue wash. */
+  .disc-hero {
+    position: relative; isolation: isolate; overflow: hidden; border-radius: 24px;
+    border: 1px solid var(--line-strong); min-height: 296px;
+    display: flex; align-items: flex-end; padding: 28px;
+    animation: rise .55s var(--ease-out) backwards;
+  }
+  .disc-hero-bg {
+    position: absolute; inset: 0; z-index: -2; background-size: cover; background-position: center;
+    filter: blur(38px) saturate(1.35); transform: scale(1.3); opacity: .5;
+  }
+  .disc-hero::after {
+    content: ""; position: absolute; inset: 0; z-index: -1;
+    background:
+      radial-gradient(95% 130% at 10% 115%, hsl(var(--hue,142) 68% 32% / .62), transparent 60%),
+      linear-gradient(0deg, rgba(8,6,10,.94), rgba(8,6,10,.28) 55%, rgba(8,6,10,.62));
+  }
+  .disc-hero-art {
+    width: 152px; height: 152px; flex: 0 0 auto; margin-right: 24px; border-radius: 16px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,.14); box-shadow: 0 26px 52px rgba(0,0,0,.55);
+    animation: heroArt .75s var(--ease-out) backwards;
+  }
+  .disc-hero-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .disc-hero-meta { flex: 1; min-width: 0; }
+  .disc-eyebrow { font-family: "DM Mono", monospace; font-size: 11px; letter-spacing: .24em; text-transform: uppercase; color: var(--accent-bright); margin-bottom: 10px; }
+  .disc-hero-title { font-family: var(--font-display); font-size: clamp(26px, 4.4vw, 46px); line-height: 1.02; font-weight: 600; letter-spacing: -.025em; margin: 0 0 8px; word-break: break-word; }
+  .disc-hero-artist { color: var(--text); opacity: .82; font-size: 15px; margin-bottom: 18px; }
+  .disc-hero-play {
+    display: inline-flex; align-items: center; gap: 9px; cursor: pointer; border: 0; border-radius: 999px;
+    padding: 11px 22px 11px 17px; font-weight: 700; font-size: 14px; color: var(--accent-ink);
+    background: var(--accent); box-shadow: 0 10px 26px var(--accent-glow);
+    transition: transform .14s var(--ease), background .14s ease;
+  }
+  .disc-hero-play svg { width: 20px; height: 20px; fill: currentColor; }
+  .disc-hero-play:hover { transform: scale(1.04); background: var(--accent-bright); }
+
+  /* Shelves: horizontally-scrolling rows of artwork cards, each with a hue accent. */
+  /* min-width:0 lets the row's overflow-x scroll instead of stretching the shelf to its content. */
+  .shelf { min-width: 0; animation: rise .5s var(--ease-out) backwards; animation-delay: calc(min(var(--si,0), 14) * 60ms); }
+  .shelf-head { display: flex; align-items: baseline; gap: 12px; margin: 0 0 14px; }
+  .shelf-title { font-family: var(--font-display); font-size: 22px; font-weight: 600; letter-spacing: -.015em; margin: 0; position: relative; padding-left: 14px; }
+  .shelf-title::before { content: ""; position: absolute; left: 0; top: .18em; bottom: .18em; width: 4px; border-radius: 2px;
+    background: linear-gradient(hsl(var(--hue,142) 72% 62%), hsl(var(--hue,142) 70% 42%)); }
+  .shelf-row { display: flex; gap: 16px; overflow-x: auto; scroll-snap-type: x proximity; padding: 6px 2px 12px; scrollbar-width: none; -webkit-overflow-scrolling: touch; cursor: grab; }
+  .shelf-row::-webkit-scrollbar { display: none; }
+  .shelf-row.dragging { cursor: grabbing; scroll-snap-type: none; scroll-behavior: auto; }
+  .shelf-row.dragging .disc-card { cursor: grabbing; }
+  .shelf-row.dragging * { pointer-events: none; } /* prevents a drag from triggering card clicks/hover */
+
+  .disc-card { flex: 0 0 auto; width: 158px; scroll-snap-align: start; cursor: pointer;
+    animation: rise .5s var(--ease-out) backwards; animation-delay: calc(min(var(--i,0), 12) * 35ms); }
+  .disc-art { position: relative; width: 158px; height: 158px; border-radius: 14px; overflow: hidden;
+    background: var(--surface); border: 1px solid var(--line); box-shadow: 0 12px 26px rgba(0,0,0,.4);
+    transition: transform .2s var(--ease), box-shadow .2s ease, border-color .2s ease; }
+  .disc-art img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .4s var(--ease); }
+  .disc-card:hover .disc-art { transform: translateY(-4px); border-color: hsl(var(--hue,142) 60% 52% / .6);
+    box-shadow: 0 20px 40px rgba(0,0,0,.5), 0 0 0 1px hsl(var(--hue,142) 72% 56% / .28); }
+  .disc-card:hover .disc-art img { transform: scale(1.07); }
+  .disc-play { position: absolute; right: 10px; bottom: 10px; width: 42px; height: 42px; border-radius: 50%; border: 0; cursor: pointer;
+    display: grid; place-items: center; color: var(--accent-ink); background: var(--accent); box-shadow: 0 8px 18px var(--accent-glow);
+    opacity: 0; transform: translateY(8px) scale(.9); transition: opacity .18s ease, transform .18s var(--ease); }
+  .disc-play svg { width: 20px; height: 20px; fill: currentColor; }
+  .disc-card:hover .disc-play, .disc-art:focus-within .disc-play { opacity: 1; transform: translateY(0) scale(1); }
+  .disc-add { position: absolute; left: 10px; top: 10px; width: 32px; height: 32px; border-radius: 50%; border: 0; cursor: pointer;
+    display: grid; place-items: center; color: #fff; background: rgba(8,6,10,.6); backdrop-filter: blur(6px);
+    opacity: 0; transform: scale(.85); transition: opacity .18s ease, transform .18s var(--ease), background .14s ease, color .14s ease; }
+  .disc-add svg { width: 18px; height: 18px; fill: currentColor; }
+  .disc-card:hover .disc-add { opacity: 1; transform: scale(1); }
+  .disc-add:hover { background: var(--accent); color: var(--accent-ink); }
+  .disc-name { margin-top: 11px; font-weight: 600; font-size: 14px; line-height: 1.25; overflow: hidden;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .disc-artist { color: var(--muted); font-size: 12.5px; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Ranked (Top) shelf: oversized outlined chart numerals beside each cover. */
+  .disc-card.ranked { display: flex; align-items: center; gap: 8px; width: auto; }
+  .disc-card.ranked .disc-rank { flex: 0 0 auto; min-width: 46px; text-align: center;
+    font-family: "DM Mono", monospace; font-weight: 500; font-size: 58px; line-height: 1; color: transparent;
+    -webkit-text-stroke: 1.5px hsl(var(--hue,142) 58% 60% / .75); }
+  .disc-card.ranked .disc-rank-col { width: 150px; }
+  .disc-card.ranked .disc-art { width: 150px; height: 150px; }
+
+  @keyframes heroArt { from { opacity: 0; transform: translateY(14px) scale(.94); } to { opacity: 1; transform: none; } }
+
+  /* Desktop rail Discover button (sits under search). */
+  .rail-nav { display: flex; align-items: center; gap: 10px; width: 100%; cursor: pointer; text-align: left;
+    margin-top: 10px; padding: 10px 12px; border-radius: 12px; border: 1px solid transparent; color: var(--muted);
+    background: transparent; font-weight: 600; font-size: 13.5px; transition: color .14s ease, background .14s ease, border-color .14s ease; }
+  .rail-nav svg { width: 18px; height: 18px; fill: currentColor; flex: 0 0 auto; }
+  .rail-nav:hover { color: var(--text); background: rgba(255,255,255,0.05); border-color: var(--line); }
+  .rail-nav.active { color: var(--accent-bright); background: var(--accent-soft); border-color: transparent; }
+
   /* ---------- loading / empty / skeleton ---------- */
   .empty, .loading { color: var(--muted); padding: 56px 4px; font-size: 15px; line-height: 1.55; max-width: 640px; }
   .empty b { color: var(--text); font-weight: 700; }
@@ -514,6 +626,10 @@
       <svg viewBox="0 0 24 24"><path d="M10 4a6 6 0 0 1 4.6 9.85l5.27 5.28-1.42 1.41-5.27-5.27A6 6 0 1 1 10 4zm0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
       Search for a song…
     </button>
+    <button class="rail-nav" id="railDiscover" type="button">
+      <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm3.5-11.5-5 2-2 5 5-2 2-5zM12 13a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/></svg>
+      Discover
+    </button>
     <div class="rail-label">Listeners</div>
     <div class="rail-people" id="railPeople"></div>
     <div class="rail-foot"><span class="dot"></span><span id="railMe">Browsing as guest</span></div>
@@ -675,9 +791,11 @@
 
   // ---- token / identity ------------------------------------------------------
   let authToken = null;
+  let arrivedWithToken = false; // true only on a fresh /playlist-link open (→ land on their playlists)
   try {
     const params = new URLSearchParams(location.search);
     const urlToken = params.get("token");
+    arrivedWithToken = !!urlToken;
     if (urlToken) {
       localStorage.setItem("plToken", urlToken);
       params.delete("token");
@@ -793,6 +911,8 @@
     railPeople.querySelectorAll(".person").forEach((r) => {
       r.classList.toggle("active", String(r.dataset.uid) === String(currentUserId));
     });
+    const rd = document.getElementById("railDiscover");
+    if (rd) rd.classList.remove("active");
   }
 
   // ---- header / stage tint ---------------------------------------------------
@@ -847,10 +967,168 @@
         grid.appendChild(card);
       });
       view.innerHTML = '<div class="home-lead">Listeners</div><div class="home-sub">Whose playlist do you want to spin?</div>';
+      view.appendChild(buildDiscoverPromo());
       view.appendChild(grid);
     } catch (e) {
       view.innerHTML = '<div class="empty">Couldn\'t load playlists.</div>';
     }
+  }
+
+  // ---- Discover (trending) ---------------------------------------------------
+  function buildDiscoverPromo() {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "disc-banner";
+    b.innerHTML =
+      '<div class="disc-banner-txt"><span class="disc-banner-k">Discover</span>' +
+      '<span class="disc-banner-t">What the world is playing right now</span></div>' +
+      '<svg class="disc-banner-arrow" viewBox="0 0 24 24"><path d="M5 12h12l-5-5 1.4-1.4L21.8 12l-8.4 8.4L12 19l5-5H5z"/></svg>';
+    b.addEventListener("click", () => go(() => showDiscover()));
+    return b;
+  }
+
+  // Resets to the listeners base then opens Discover (used by the rail entry).
+  function openDiscover() {
+    navStack.length = 0;
+    navStack.push(() => showUsers());
+    go(() => showDiscover());
+  }
+
+  async function showDiscover() {
+    currentUserId = null; markRail(); tintStage(null);
+    document.getElementById("railDiscover").classList.add("active");
+    history.replaceState(null, "", "?view=discover");
+    setHeader("Discover", "What the world is playing");
+    view.innerHTML = trackSkeleton();
+    let shelves;
+    try { shelves = await getJSON("/api/discover"); }
+    catch (e) { view.innerHTML = '<div class="empty">Couldn\'t load Discover right now — try again later.</div>'; return; }
+    if (!shelves.length) { view.innerHTML = '<div class="empty">Nothing trending right now — check back soon.</div>'; return; }
+
+    view.innerHTML = "";
+    const wrap = document.createElement("div"); wrap.className = "discover";
+    const lead = shelves[0];
+    if (lead.tracks && lead.tracks.length) wrap.appendChild(buildDiscoverHero(lead.tracks[0], lead.accent));
+    shelves.forEach((shelf, si) => wrap.appendChild(buildShelf(shelf, si)));
+    view.appendChild(wrap);
+  }
+
+  function buildDiscoverHero(t, accent) {
+    const hero = document.createElement("div");
+    hero.className = "disc-hero";
+    hero.style.setProperty("--hue", accent);
+    hero.innerHTML =
+      '<div class="disc-hero-bg"></div>' +
+      '<div class="disc-hero-art"><img alt="" /></div>' +
+      '<div class="disc-hero-meta">' +
+        '<div class="disc-eyebrow">Trending · No.1</div>' +
+        '<h2 class="disc-hero-title"></h2>' +
+        '<div class="disc-hero-artist"></div>' +
+        '<button class="disc-hero-play" type="button"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>Play now</button>' +
+      '</div>';
+    const img = hero.querySelector("img");
+    img.src = t.artworkUrl || FALLBACK_ART; img.onerror = () => { img.src = FALLBACK_ART; };
+    if (t.artworkUrl) hero.querySelector(".disc-hero-bg").style.backgroundImage = "url('" + t.artworkUrl + "')";
+    hero.querySelector(".disc-hero-title").textContent = t.title;
+    hero.querySelector(".disc-hero-artist").textContent = t.artist;
+    hero.querySelector(".disc-hero-play").addEventListener("click", () => resolveAndPlay(t.artist + " " + t.title, t.title));
+    return hero;
+  }
+
+  function buildShelf(shelf, si) {
+    const sec = document.createElement("section");
+    sec.className = "shelf";
+    sec.style.setProperty("--hue", shelf.accent);
+    sec.style.setProperty("--si", si);
+    const head = document.createElement("div"); head.className = "shelf-head";
+    const h = document.createElement("h3"); h.className = "shelf-title"; h.textContent = shelf.title;
+    head.appendChild(h);
+    sec.appendChild(head);
+    const row = document.createElement("div"); row.className = "shelf-row";
+    (shelf.tracks || []).forEach((t, i) => row.appendChild(buildDiscCard(t, i, shelf.ranked)));
+    enableDragScroll(row);
+    sec.appendChild(row);
+    return sec;
+  }
+
+  // Mouse drag-to-scroll + vertical-wheel → horizontal for a shelf row (touch keeps native scrolling).
+  function enableDragScroll(el) {
+    let down = false, startX = 0, startLeft = 0, moved = false;
+    el.addEventListener("pointerdown", (e) => {
+      if (e.pointerType !== "mouse" || e.button !== 0) return;
+      down = true; moved = false; startX = e.clientX; startLeft = el.scrollLeft;
+      el.setPointerCapture(e.pointerId);
+    });
+    el.addEventListener("pointermove", (e) => {
+      if (!down) return;
+      const dx = e.clientX - startX;
+      if (!moved && Math.abs(dx) > 4) { moved = true; el.classList.add("dragging"); }
+      if (moved) el.scrollLeft = startLeft - dx;
+    });
+    const end = (e) => {
+      if (!down) return;
+      down = false;
+      try { el.releasePointerCapture(e.pointerId); } catch (_) {}
+      // Keep .dragging through the click that fires right after release, then drop it.
+      if (moved) setTimeout(() => el.classList.remove("dragging"), 0);
+      else el.classList.remove("dragging");
+    };
+    el.addEventListener("pointerup", end);
+    el.addEventListener("pointercancel", end);
+    // Swallow the click that follows a real drag so it doesn't play/open a card.
+    el.addEventListener("click", (e) => { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
+    el.addEventListener("wheel", (e) => {
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { el.scrollLeft += e.deltaY; e.preventDefault(); }
+    }, { passive: false });
+  }
+
+  function buildDiscCard(t, i, ranked) {
+    const card = document.createElement("div");
+    card.className = "disc-card" + (ranked ? " ranked" : "");
+    card.style.setProperty("--i", i);
+    const art =
+      '<div class="disc-art">' +
+        '<img loading="lazy" alt="" />' +
+        '<button class="disc-play" type="button" aria-label="Play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>' +
+        '<button class="disc-add" type="button" aria-label="Add to a playlist">' + ICON_PLUS + '</button>' +
+      '</div><div class="disc-name"></div><div class="disc-artist"></div>';
+    card.innerHTML = ranked ? '<div class="disc-rank">' + (i + 1) + '</div><div class="disc-rank-col">' + art + '</div>' : art;
+    const img = card.querySelector("img");
+    img.src = t.artworkUrl || FALLBACK_ART; img.onerror = () => { img.src = FALLBACK_ART; };
+    card.querySelector(".disc-name").textContent = t.title;
+    card.querySelector(".disc-artist").textContent = t.artist;
+    const play = () => resolveAndPlay(t.artist + " " + t.title, t.title);
+    card.querySelector(".disc-art").addEventListener("click", play);
+    card.querySelector(".disc-play").addEventListener("click", (e) => { e.stopPropagation(); play(); });
+    card.querySelector(".disc-name").addEventListener("click", play);
+    card.querySelector(".disc-add").addEventListener("click", (e) => { e.stopPropagation(); discoverAdd(t, e.currentTarget); });
+    return card;
+  }
+
+  // Discover tracks carry only metadata; resolve to a playable YouTube source on demand, then play.
+  async function resolveAndPlay(query, label) {
+    toast("Finding “" + label + "”…");
+    try {
+      const results = await getJSON("/api/search?q=" + encodeURIComponent(query));
+      if (!results.length) { toast("Couldn’t find “" + label + "”."); return; }
+      queue = results; playlistName = "Discover"; playAt(0);
+    } catch (e) { toast("Couldn’t play that one."); }
+  }
+
+  async function discoverAdd(t, btn) {
+    if (!authToken) { toast("Open your /playlist link to add songs."); return; }
+    btn.disabled = true;
+    try {
+      const results = await getJSON("/api/search?q=" + encodeURIComponent(t.artist + " " + t.title));
+      if (!results.length) { toast("Couldn’t find that track."); btn.disabled = false; return; }
+      if (me) {
+        // Let the owner choose which playlist (anchored to the + button).
+        const r = btn.getBoundingClientRect();
+        btn.disabled = false;
+        openAddPicker(r.left, r.bottom + 6, results[0]);
+      } else {
+        addToPlaylist(results[0], btn);
+      }
+    } catch (e) { toast("Couldn’t add that one."); btn.disabled = false; }
   }
 
   // A user's playlists — the screen between the people grid and a single playlist's tracks.
@@ -1411,6 +1689,7 @@
   function openSearchModal() { searchModal.classList.add("open"); setTimeout(() => { qInput.focus(); qInput.select(); }, 60); }
   function closeSearchModal() { searchModal.classList.remove("open"); qInput.blur(); }
   $("railSearch").addEventListener("click", openSearchModal);
+  $("railDiscover").addEventListener("click", openDiscover);
   $("stageSearch").addEventListener("click", openSearchModal);
   searchModal.addEventListener("click", (e) => { if (e.target === searchModal) closeSearchModal(); });
   qInput.addEventListener("keydown", (e) => {
@@ -1648,13 +1927,25 @@
       return;
     }
 
-    const target = deepUser || (me ? me.userId : null);
-    let opened = false;
-    if (target) opened = await openUserById(target, users, deepPlaylist);
-    if (!opened) {
-      if (isDesktop() && users.length) go(() => showPlaylists(users[0]));  // desktop: never show an empty stage
-      else showUsers();
+    if (params.get("view") === "discover") {
+      go(() => showDiscover());
+      syncBack();
+      return;
     }
+
+    // Explicit deep link to someone's playlists (?user=&playlist=).
+    if (deepUser && (await openUserById(deepUser, users, deepPlaylist))) {
+      syncBack();
+      return;
+    }
+    // Fresh magic-link open → land on the owner's playlists (that's what the link is for).
+    if (arrivedWithToken && me) {
+      await openUserById(me.userId, users);
+      syncBack();
+      return;
+    }
+    // Default landing for the bare domain: Discover.
+    go(() => showDiscover());
     syncBack();
   })();
 })();
