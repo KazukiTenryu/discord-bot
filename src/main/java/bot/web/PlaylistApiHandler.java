@@ -842,7 +842,9 @@ public class PlaylistApiHandler implements HttpHandler {
             sendJson(exchange, out);
         } catch (Exception e) {
             LOGGER.warn("Couldn't list Spotify playlists for {}", owner.userId(), e);
-            sendText(exchange, 502, "Couldn't read your Spotify playlists.");
+            // Surface the underlying Spotify status/body so the player can show why (it's the user's
+            // own data; the message is e.g. "...returned status 403").
+            sendText(exchange, 502, "Couldn't read your Spotify playlists: " + e.getMessage());
         }
     }
 

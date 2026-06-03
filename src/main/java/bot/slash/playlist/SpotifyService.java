@@ -221,7 +221,11 @@ public class SpotifyService {
             HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() / 100 != 2) {
                 LOGGER.warn("Spotify {} returned status {}: {}", what, response.statusCode(), response.body());
-                throw new SpotifyException("Spotify " + what + " failed with status " + response.statusCode());
+                String body = response.body() == null ? "" : response.body().strip();
+                if (body.length() > 300) {
+                    body = body.substring(0, 300);
+                }
+                throw new SpotifyException("status " + response.statusCode() + (body.isEmpty() ? "" : " — " + body));
             }
             return MAPPER.readTree(response.body());
         } catch (SpotifyException e) {
@@ -244,6 +248,8 @@ public class SpotifyService {
     }
 
     private static String enc(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+        // %20 rather than '+' for spaces: unambiguous in a URL query (the scope is space-separated) and
+        // still valid in the token POST body. Mirrors MetadataService.
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
     }
 }
