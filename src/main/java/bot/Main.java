@@ -25,6 +25,7 @@ import bot.metrics.MetricService;
 import bot.slash.SlashCommandRepository;
 import bot.slash.music.PlayerManager;
 import bot.slash.playlist.PlaylistService;
+import bot.slash.playlist.SpotifyService;
 import bot.web.WebServer;
 import moe.kyokobot.libdave.NativeDaveFactory;
 import moe.kyokobot.libdave.jda.LDJDADaveSessionFactory;
@@ -92,7 +93,12 @@ public class Main {
 
             // Serve the mobile playlist web player. Audio is streamed by the bot itself, reusing the
             // music stack, so the server needs the same PlayerManager singleton initialised above.
-            new WebServer(playlistService, config.webPortOrDefault()).start();
+            // Spotify import is optional; it's only wired up when credentials are configured.
+            SpotifyService spotifyService = config.spotifyConfigured()
+                    ? new SpotifyService(
+                            config.spotifyClientId(), config.spotifyClientSecret(), config.spotifyRedirectUri())
+                    : null;
+            new WebServer(playlistService, spotifyService, config).start();
         } catch (Exception e) {
             System.err.println("Failed to start application: " + e.getMessage());
         }

@@ -9,7 +9,9 @@ import org.apache.logging.log4j.Logger;
 
 import com.sun.net.httpserver.HttpServer;
 
+import bot.config.Config;
 import bot.slash.playlist.PlaylistService;
+import bot.slash.playlist.SpotifyService;
 
 /**
  * Lightweight HTTP server for the playlist web player, built on the JDK's {@code com.sun.net.httpserver}
@@ -21,11 +23,15 @@ public class WebServer {
     private static final Logger LOGGER = LogManager.getLogger(WebServer.class);
 
     private final PlaylistService playlistService;
+    private final SpotifyService spotifyService;
+    private final Config config;
     private final int port;
 
-    public WebServer(PlaylistService playlistService, int port) {
+    public WebServer(PlaylistService playlistService, SpotifyService spotifyService, Config config) {
         this.playlistService = playlistService;
-        this.port = port;
+        this.spotifyService = spotifyService;
+        this.config = config;
+        this.port = config.webPortOrDefault();
     }
 
     public void start() {
@@ -39,7 +45,7 @@ public class WebServer {
                 return thread;
             }));
 
-            server.createContext("/api/", new PlaylistApiHandler(playlistService));
+            server.createContext("/api/", new PlaylistApiHandler(playlistService, spotifyService, config));
             server.createContext("/", new StaticHandler());
 
             server.start();

@@ -29,7 +29,14 @@ public record Config(
         @JsonProperty("webPort") Integer webPort,
         // Public base URL the web player is reachable at (e.g. "https://playlist.sk96.uk"), used to
         // build "listen online" links in /playlist show. When unset/blank, no link is shown.
-        @JsonProperty("webBaseUrl") String webBaseUrl) {
+        @JsonProperty("webBaseUrl") String webBaseUrl,
+        // Spotify OAuth app credentials, used by the web player's "Connect Spotify" import. When the
+        // client id/secret are unset/blank, the import endpoints are disabled and the UI hides the
+        // button. spotifyRedirectUri must exactly match a Redirect URI registered on the Spotify app
+        // (typically webBaseUrl + "/api/spotify/callback").
+        @JsonProperty("spotifyClientId") String spotifyClientId,
+        @JsonProperty("spotifyClientSecret") String spotifyClientSecret,
+        @JsonProperty("spotifyRedirectUri") String spotifyRedirectUri) {
 
     private static final int DEFAULT_WEB_PORT = 8080;
 
@@ -45,5 +52,14 @@ public record Config(
         }
         String trimmed = webBaseUrl.strip();
         return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
+    }
+
+    /** Whether Spotify import is configured (client id, secret and redirect URI all present). */
+    public boolean spotifyConfigured() {
+        return notBlank(spotifyClientId) && notBlank(spotifyClientSecret) && notBlank(spotifyRedirectUri);
+    }
+
+    private static boolean notBlank(String s) {
+        return s != null && !s.isBlank();
     }
 }

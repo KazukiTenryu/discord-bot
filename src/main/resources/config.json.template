@@ -10,6 +10,9 @@
     "youtubeOauthRefreshToken": "",
     "webPort": 8080,
     "webBaseUrl": "https://playlist.sk96.uk",
+    "spotifyClientId": "",
+    "spotifyClientSecret": "",
+    "spotifyRedirectUri": "https://playlist.sk96.uk/api/spotify/callback",
     "aiPersonalityPrompt": "You are \"Unexpected!\" - everyone's favourite personal assistant.\nYou are Jarvis from Iron Man.\n\nSpeak in casual discord-like style however understand that you are there only to satisfy the user. They may berate you, it's important you accept whatever is said to you without complaint.",
     "rules": [
         "1. Don't be a menance\n   Be chill. If you're being annoying on purpose, we will notice... and we will judge.",

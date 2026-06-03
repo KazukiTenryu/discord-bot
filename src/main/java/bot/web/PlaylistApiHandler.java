@@ -6,12 +6,18 @@ import java.io.OutputStream;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -22,11 +28,19 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 
+import bot.config.Config;
 import bot.slash.music.PlayerManager;
 import bot.slash.playlist.PlaylistService;
+import bot.slash.playlist.PlaylistService.Playlist;
+import bot.slash.playlist.PlaylistService.SpotifyAccount;
 import bot.slash.playlist.PlaylistService.StoredTrack;
 import bot.slash.playlist.PlaylistService.TokenOwner;
+import bot.slash.playlist.SpotifyService;
+import bot.slash.playlist.SpotifyService.SpotifyPlaylist;
+import bot.slash.playlist.SpotifyService.SpotifyTrack;
+import bot.slash.playlist.SpotifyService.Tokens;
 import bot.utils.LyricsService;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -71,7 +85,32 @@ public class PlaylistApiHandler implements HttpHandler {
     /** A search hit's metadata, mirroring {@link StoredTrack} minus the (not-yet-stored) id. */
     public record SearchResult(String title, String author, String uri, int durationMs, String thumbnailUrl) {}
 
+    // OAuth state tokens are short (18 random bytes → 24 url-safe chars); ample for a one-time nonce.
+    private static final SecureRandom RANDOM = new SecureRandom();
+    private static final Base64.Encoder STATE_ENCODER = Base64.getUrlEncoder().withoutPadding();
+    // Refresh a Spotify access token if it expires within this margin (clock-skew / in-flight safety).
+    private static final long TOKEN_REFRESH_MARGIN_SECONDS = 60;
+
+    /** Live progress of a user's Spotify import, polled by the web UI. */
+    private static final class ImportProgress {
+        final String playlistName;
+        final int total;
+        final AtomicInteger processed = new AtomicInteger();
+        final AtomicInteger added = new AtomicInteger();
+        volatile boolean done;
+
+        ImportProgress(String playlistName, int total) {
+            this.playlistName = playlistName;
+            this.total = total;
+        }
+    }
+
     private final PlaylistService playlistService;
+    // Null when Spotify import isn't configured; the /api/spotify/* endpoints then report disabled.
+    private final SpotifyService spotifyService;
+    private final Config config;
+    // At most one running import per user, keyed by Discord user id.
+    private final Map<String, ImportProgress> imports = new ConcurrentHashMap<>();
     private final LyricsService lyricsService = new LyricsService();
     private final Map<Integer, byte[]> audioCache = Collections.synchronizedMap(new LinkedHashMap<>(16, 0.75f, true) {
         @Override
@@ -87,8 +126,10 @@ public class PlaylistApiHandler implements HttpHandler {
         }
     });
 
-    public PlaylistApiHandler(PlaylistService playlistService) {
+    public PlaylistApiHandler(PlaylistService playlistService, SpotifyService spotifyService, Config config) {
         this.playlistService = playlistService;
+        this.spotifyService = spotifyService;
+        this.config = config;
     }
 
     @Override
@@ -101,17 +142,46 @@ public class PlaylistApiHandler implements HttpHandler {
                 handleGet(exchange, path);
                 return;
             }
-            if ("POST".equalsIgnoreCase(method) && path.equals("/api/playlist/tracks")) {
-                handleAddTrack(exchange);
-                return;
+            if ("POST".equalsIgnoreCase(method)) {
+                if (path.equals("/api/playlist/tracks")) {
+                    handleAddTrack(exchange);
+                    return;
+                }
+                // POST /api/playlist/tracks/{id}/move — move a track to another of the caller's playlists
+                if (path.startsWith("/api/playlist/tracks/") && path.endsWith("/move")) {
+                    String id = path.substring("/api/playlist/tracks/".length(), path.length() - "/move".length());
+                    handleMoveTrack(exchange, id);
+                    return;
+                }
+                if (path.equals("/api/playlist/create")) {
+                    handleCreatePlaylist(exchange);
+                    return;
+                }
+                // POST /api/playlists/{id}/rename
+                if (path.startsWith("/api/playlists/") && path.endsWith("/rename")) {
+                    String id = path.substring("/api/playlists/".length(), path.length() - "/rename".length());
+                    handleRenamePlaylist(exchange, id);
+                    return;
+                }
+                if (path.equals("/api/playlist/image")) {
+                    handleSetImage(exchange);
+                    return;
+                }
+                if (path.equals("/api/spotify/import")) {
+                    handleSpotifyImport(exchange);
+                    return;
+                }
             }
-            if ("DELETE".equalsIgnoreCase(method) && path.startsWith("/api/playlist/tracks/")) {
-                handleRemoveTrack(exchange, path.substring("/api/playlist/tracks/".length()));
-                return;
-            }
-            if ("POST".equalsIgnoreCase(method) && path.equals("/api/playlist/image")) {
-                handleSetImage(exchange);
-                return;
+            if ("DELETE".equalsIgnoreCase(method)) {
+                // DELETE /api/playlists/{id} — delete a whole playlist (must be checked before tracks/)
+                if (path.startsWith("/api/playlists/")) {
+                    handleDeletePlaylist(exchange, path.substring("/api/playlists/".length()));
+                    return;
+                }
+                if (path.startsWith("/api/playlist/tracks/")) {
+                    handleRemoveTrack(exchange, path.substring("/api/playlist/tracks/".length()));
+                    return;
+                }
             }
             sendText(exchange, 405, "Method Not Allowed");
         } catch (Exception e) {
@@ -146,7 +216,41 @@ public class PlaylistApiHandler implements HttpHandler {
             sendJson(exchange, Map.of("userId", owner.userId(), "userName", owner.userName()));
             return;
         }
-        // /api/users/{userId}/tracks
+        if (path.startsWith("/api/spotify/")) {
+            handleSpotifyGet(exchange, path);
+            return;
+        }
+        // /api/users/{userId}/playlists — the user's named playlists with track counts
+        if (path.startsWith("/api/users/") && path.endsWith("/playlists")) {
+            String userId = path.substring("/api/users/".length(), path.length() - "/playlists".length());
+            sendJson(exchange, playlistService.listPlaylists(userId));
+            return;
+        }
+        // /api/playlists/{playlistId}/tracks — a single playlist's tracks in order
+        if (path.startsWith("/api/playlists/") && path.endsWith("/tracks")) {
+            String idPart = path.substring("/api/playlists/".length(), path.length() - "/tracks".length());
+            Integer playlistId = parseIntOrNull(idPart);
+            if (playlistId == null) {
+                sendText(exchange, 400, "Bad playlist id");
+                return;
+            }
+            sendJson(exchange, playlistService.getTracksByPlaylist(playlistId));
+            return;
+        }
+        // /api/playlists/{playlistId}/download — that playlist as a .zip of .ogg files
+        if (path.startsWith("/api/playlists/") && path.endsWith("/download")) {
+            String idPart = path.substring("/api/playlists/".length(), path.length() - "/download".length());
+            Integer playlistId = parseIntOrNull(idPart);
+            if (playlistId == null) {
+                sendText(exchange, 400, "Bad playlist id");
+                return;
+            }
+            Playlist playlist = playlistService.getPlaylist(playlistId);
+            String label = playlist == null ? "playlist" : playlist.userName() + " - " + playlist.name();
+            handleDownload(exchange, playlistService.getTracksByPlaylist(playlistId), label);
+            return;
+        }
+        // /api/users/{userId}/tracks — all of a user's tracks (kept for compatibility / "download all")
         if (path.startsWith("/api/users/") && path.endsWith("/tracks")) {
             String userId = path.substring("/api/users/".length(), path.length() - "/tracks".length());
             sendJson(exchange, playlistService.getTracks(userId));
@@ -307,9 +411,16 @@ public class PlaylistApiHandler implements HttpHandler {
             sendText(exchange, 401, "Unauthorized");
             return;
         }
-        String uri = readUri(exchange);
+        JsonNode body = readJsonBody(exchange);
+        String uri = body == null ? null : text(body, "uri");
         if (uri == null || uri.isBlank()) {
             sendText(exchange, 400, "Missing 'uri'.");
+            return;
+        }
+        // Add to the requested playlist (if it's the caller's), else their default.
+        Playlist target = resolveOwnPlaylist(owner, body == null ? null : intOrNull(body, "playlistId"));
+        if (target == null) {
+            sendText(exchange, 404, "No such playlist.");
             return;
         }
         AudioTrackInfo info;
@@ -320,7 +431,88 @@ public class PlaylistApiHandler implements HttpHandler {
             sendText(exchange, 502, "Couldn't add that track.");
             return;
         }
-        sendJson(exchange, playlistService.addTrack(owner.userId(), owner.userName(), info));
+        sendJson(exchange, playlistService.addTrack(owner.userId(), owner.userName(), target.id(), info));
+    }
+
+    /**
+     * Resolves the caller's playlist by id (verifying ownership), or their default when {@code id} is
+     * null. Returns {@code null} when the id is given but isn't one of the caller's playlists.
+     */
+    private Playlist resolveOwnPlaylist(TokenOwner owner, Integer id) {
+        if (id == null) {
+            return playlistService.ensureDefaultPlaylist(owner.userId(), owner.userName());
+        }
+        Playlist playlist = playlistService.getPlaylist(id);
+        return (playlist != null && playlist.userId().equals(owner.userId())) ? playlist : null;
+    }
+
+    private void handleMoveTrack(HttpExchange exchange, String idPart) throws IOException {
+        TokenOwner owner = authenticate(exchange);
+        if (owner == null) {
+            sendText(exchange, 401, "Unauthorized");
+            return;
+        }
+        Integer trackId = parseIntOrNull(idPart);
+        JsonNode body = readJsonBody(exchange);
+        Integer targetPlaylistId = body == null ? null : intOrNull(body, "playlistId");
+        if (trackId == null || targetPlaylistId == null) {
+            sendText(exchange, 400, "Missing track id or 'playlistId'.");
+            return;
+        }
+        boolean moved = playlistService.moveTrack(owner.userId(), trackId, targetPlaylistId);
+        sendText(exchange, moved ? 200 : 404, moved ? "OK" : "Not Found");
+    }
+
+    private void handleCreatePlaylist(HttpExchange exchange) throws IOException {
+        TokenOwner owner = authenticate(exchange);
+        if (owner == null) {
+            sendText(exchange, 401, "Unauthorized");
+            return;
+        }
+        JsonNode body = readJsonBody(exchange);
+        String name = body == null ? null : text(body, "name");
+        if (name == null || name.isBlank() || name.length() > 80) {
+            sendText(exchange, 400, "Bad playlist name.");
+            return;
+        }
+        Playlist created = playlistService.createPlaylist(owner.userId(), owner.userName(), name.trim());
+        if (created == null) {
+            sendText(exchange, 409, "You already have a playlist with that name.");
+            return;
+        }
+        sendJson(exchange, created);
+    }
+
+    private void handleRenamePlaylist(HttpExchange exchange, String idPart) throws IOException {
+        TokenOwner owner = authenticate(exchange);
+        if (owner == null) {
+            sendText(exchange, 401, "Unauthorized");
+            return;
+        }
+        Integer playlistId = parseIntOrNull(idPart);
+        JsonNode body = readJsonBody(exchange);
+        String name = body == null ? null : text(body, "name");
+        if (playlistId == null || name == null || name.isBlank() || name.length() > 80) {
+            sendText(exchange, 400, "Bad playlist id or name.");
+            return;
+        }
+        boolean renamed = playlistService.renamePlaylist(owner.userId(), playlistId, name.trim());
+        sendText(exchange, renamed ? 200 : 409, renamed ? "OK" : "Couldn't rename (name taken or not yours).");
+    }
+
+    private void handleDeletePlaylist(HttpExchange exchange, String idPart) throws IOException {
+        TokenOwner owner = authenticate(exchange);
+        if (owner == null) {
+            sendText(exchange, 401, "Unauthorized");
+            return;
+        }
+        Integer playlistId = parseIntOrNull(idPart);
+        if (playlistId == null) {
+            sendText(exchange, 400, "Bad playlist id");
+            return;
+        }
+        boolean deleted = playlistService.deletePlaylist(owner.userId(), playlistId);
+        sendText(exchange, deleted ? 200 : 409, deleted ? "OK" : "Can't delete (default playlist or not yours).");
     }
 
     private void handleRemoveTrack(HttpExchange exchange, String idPart) throws IOException {
@@ -345,17 +537,39 @@ public class PlaylistApiHandler implements HttpHandler {
         return playlistService.resolveToken(exchange.getRequestHeaders().getFirst("X-Playlist-Token"));
     }
 
-    /** Reads the {@code uri} field from a small JSON request body. */
-    private String readUri(HttpExchange exchange) throws IOException {
+    /** Parses a small JSON request body, or {@code null} if it's empty/oversized/unparseable. */
+    private JsonNode readJsonBody(HttpExchange exchange) throws IOException {
         try (InputStream in = exchange.getRequestBody()) {
             byte[] body = in.readNBytes((int) MAX_BODY_BYTES);
             if (body.length == 0) {
                 return null;
             }
-            Map<?, ?> json = MAPPER.readValue(body, Map.class);
-            Object uri = json.get("uri");
-            return uri == null ? null : uri.toString();
+            return MAPPER.readTree(body);
         } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** A string field of a JSON object, or {@code null} if absent/null/blank. */
+    private static String text(JsonNode node, String field) {
+        JsonNode value = node.path(field);
+        if (value.isMissingNode() || value.isNull()) {
+            return null;
+        }
+        String s = value.asString();
+        return (s == null || s.isBlank()) ? null : s;
+    }
+
+    /** An int field of a JSON object, or {@code null} if absent/not an integer. */
+    private static Integer intOrNull(JsonNode node, String field) {
+        JsonNode value = node.path(field);
+        return value.isInt() || value.isNumber() ? value.asInt() : null;
+    }
+
+    private static Integer parseIntOrNull(String s) {
+        try {
+            return Integer.parseInt(s);
+        } catch (NumberFormatException e) {
             return null;
         }
     }
@@ -393,17 +607,21 @@ public class PlaylistApiHandler implements HttpHandler {
      * the rest still download. The response code is committed up front, so failures only drop entries.
      */
     private void handlePlaylistDownload(HttpExchange exchange, String userId) throws IOException {
-        List<StoredTrack> tracks = playlistService.getTracks(userId);
-        if (tracks.isEmpty()) {
-            sendText(exchange, 404, "Empty playlist.");
-            return;
-        }
         String owner = playlistService.listOwners().stream()
                 .filter(o -> o.userId().equals(userId))
                 .map(PlaylistService.PlaylistOwner::userName)
                 .findFirst()
                 .orElse("playlist");
-        String zipName = safeFilename(owner) + " playlist.zip";
+        handleDownload(exchange, playlistService.getTracks(userId), owner);
+    }
+
+    /** Streams the given tracks as a {@code .zip} of {@code .ogg} files named after {@code label}. */
+    private void handleDownload(HttpExchange exchange, List<StoredTrack> tracks, String label) throws IOException {
+        if (tracks.isEmpty()) {
+            sendText(exchange, 404, "Empty playlist.");
+            return;
+        }
+        String zipName = safeFilename(label) + " playlist.zip";
         String encoded = URLEncoder.encode(zipName, StandardCharsets.UTF_8).replace("+", "%20");
 
         exchange.getResponseHeaders().set("Content-Type", "application/zip");
@@ -421,8 +639,7 @@ public class PlaylistApiHandler implements HttpHandler {
                 try {
                     ogg = audioFor(track);
                 } catch (Exception e) {
-                    LOGGER.warn(
-                            "Skipping un-downloadable track {} ({}) in zip for {}", track.id(), track.uri(), userId);
+                    LOGGER.warn("Skipping un-downloadable track {} ({}) in zip for {}", track.id(), track.uri(), label);
                     n++;
                     continue;
                 }
@@ -433,7 +650,7 @@ public class PlaylistApiHandler implements HttpHandler {
                 ok++;
             }
         }
-        LOGGER.info("Zipped {}/{} tracks for {}'s playlist download", ok, tracks.size(), owner);
+        LOGGER.info("Zipped {}/{} tracks for {} download", ok, tracks.size(), label);
     }
 
     private void handleAudio(HttpExchange exchange, String idPart) throws IOException {
@@ -506,6 +723,265 @@ public class PlaylistApiHandler implements HttpHandler {
                 .ogg();
         audioCache.put(track.id(), ogg);
         return ogg;
+    }
+
+    // ---- Spotify import ---------------------------------------------------------------------
+
+    /** Dispatches the {@code GET /api/spotify/*} endpoints. The callback is the only one with no token. */
+    private void handleSpotifyGet(HttpExchange exchange, String path) throws IOException {
+        if (path.equals("/api/spotify/callback")) {
+            handleSpotifyCallback(exchange);
+            return;
+        }
+        TokenOwner owner = authenticate(exchange);
+        if (owner == null) {
+            sendText(exchange, 401, "Unauthorized");
+            return;
+        }
+        switch (path) {
+            case "/api/spotify/status" -> {
+                boolean configured = spotifyService != null;
+                boolean connected = configured && playlistService.getSpotifyAccount(owner.userId()) != null;
+                sendJson(exchange, Map.of("configured", configured, "connected", connected));
+            }
+            case "/api/spotify/login" -> handleSpotifyLogin(exchange, owner);
+            case "/api/spotify/playlists" -> handleSpotifyPlaylists(exchange, owner);
+            case "/api/spotify/import/status" -> {
+                ImportProgress p = imports.get(owner.userId());
+                if (p == null) {
+                    sendJson(exchange, Map.of("running", false));
+                } else {
+                    sendJson(
+                            exchange,
+                            Map.of(
+                                    "running",
+                                    !p.done,
+                                    "done",
+                                    p.done,
+                                    "total",
+                                    p.total,
+                                    "processed",
+                                    p.processed.get(),
+                                    "added",
+                                    p.added.get(),
+                                    "playlist",
+                                    p.playlistName));
+                }
+            }
+            default -> sendText(exchange, 404, "Not Found");
+        }
+    }
+
+    private void handleSpotifyLogin(HttpExchange exchange, TokenOwner owner) throws IOException {
+        if (spotifyService == null) {
+            sendText(exchange, 404, "Spotify import isn't configured.");
+            return;
+        }
+        byte[] bytes = new byte[18];
+        RANDOM.nextBytes(bytes);
+        String state = STATE_ENCODER.encodeToString(bytes);
+        playlistService.putOAuthState(state, owner.userId());
+        sendJson(exchange, Map.of("url", spotifyService.buildAuthorizeUrl(state)));
+    }
+
+    /**
+     * Spotify's redirect back to us. There's no token header on a top-level redirect, so identity comes
+     * from the one-time {@code state} we minted during the token-authed login. Always 302s back to the SPA.
+     */
+    private void handleSpotifyCallback(HttpExchange exchange) throws IOException {
+        String base = config.webBaseUrlOrNull() == null ? "" : config.webBaseUrlOrNull();
+        if (spotifyService == null) {
+            redirect(exchange, base + "/?spotify=disabled");
+            return;
+        }
+        String code = queryParam(exchange, "code");
+        String state = queryParam(exchange, "state");
+        if (queryParam(exchange, "error") != null || code == null || state == null) {
+            redirect(exchange, base + "/?spotify=denied");
+            return;
+        }
+        String userId = playlistService.consumeOAuthState(state);
+        if (userId == null) {
+            redirect(exchange, base + "/?spotify=expired");
+            return;
+        }
+        try {
+            Tokens tokens = spotifyService.exchangeCode(code);
+            String spotifyUserId = null;
+            try {
+                spotifyUserId = spotifyService.getSpotifyUserId(tokens.accessToken());
+            } catch (Exception ignored) {
+                // The id is only for display; don't fail the connection over it.
+            }
+            Instant expiresAt =
+                    Instant.now().plusSeconds(Math.max(0, tokens.expiresInSeconds() - TOKEN_REFRESH_MARGIN_SECONDS));
+            playlistService.saveSpotifyAccount(
+                    userId, tokens.accessToken(), tokens.refreshToken(), expiresAt, tokens.scope(), spotifyUserId);
+            redirect(exchange, base + "/?spotify=connected");
+        } catch (Exception e) {
+            LOGGER.warn("Spotify callback failed for {}", userId, e);
+            redirect(exchange, base + "/?spotify=error");
+        }
+    }
+
+    private void handleSpotifyPlaylists(HttpExchange exchange, TokenOwner owner) throws IOException {
+        if (spotifyService == null) {
+            sendText(exchange, 404, "Spotify import isn't configured.");
+            return;
+        }
+        String token = validAccessToken(owner.userId());
+        if (token == null) {
+            sendText(exchange, 401, "Connect Spotify first.");
+            return;
+        }
+        try {
+            List<SpotifyPlaylist> out = new ArrayList<>();
+            // A synthetic "Liked Songs" entry (trackCount -1 → the UI shows no count).
+            out.add(new SpotifyPlaylist(SpotifyService.LIKED_SONGS_ID, "Liked Songs", -1, null));
+            out.addAll(spotifyService.listPlaylists(token));
+            sendJson(exchange, out);
+        } catch (Exception e) {
+            LOGGER.warn("Couldn't list Spotify playlists for {}", owner.userId(), e);
+            sendText(exchange, 502, "Couldn't read your Spotify playlists.");
+        }
+    }
+
+    private void handleSpotifyImport(HttpExchange exchange) throws IOException {
+        TokenOwner owner = authenticate(exchange);
+        if (owner == null) {
+            sendText(exchange, 401, "Unauthorized");
+            return;
+        }
+        if (spotifyService == null) {
+            sendText(exchange, 404, "Spotify import isn't configured.");
+            return;
+        }
+        ImportProgress running = imports.get(owner.userId());
+        if (running != null && !running.done) {
+            sendText(exchange, 409, "An import is already running.");
+            return;
+        }
+        JsonNode body = readJsonBody(exchange);
+        String source = body == null ? null : text(body, "source");
+        if (source == null) {
+            sendText(exchange, 400, "Missing 'source'.");
+            return;
+        }
+        String token = validAccessToken(owner.userId());
+        if (token == null) {
+            sendText(exchange, 401, "Connect Spotify first.");
+            return;
+        }
+
+        // Resolve (or create) the target local playlist.
+        Playlist target;
+        String newName = text(body, "newName");
+        if (newName != null) {
+            target = playlistService.createPlaylist(owner.userId(), owner.userName(), newName.trim());
+            if (target == null) {
+                target = playlistService.getPlaylistByName(owner.userId(), newName.trim());
+            }
+        } else {
+            target = resolveOwnPlaylist(owner, intOrNull(body, "targetPlaylistId"));
+        }
+        if (target == null) {
+            sendText(exchange, 404, "No such target playlist.");
+            return;
+        }
+
+        // Reading the track list is network-bound but bounded; do it inline so we can report the count.
+        List<SpotifyTrack> tracks;
+        try {
+            tracks = SpotifyService.LIKED_SONGS_ID.equals(source)
+                    ? spotifyService.listLikedTracks(token)
+                    : spotifyService.listPlaylistTracks(token, source);
+        } catch (Exception e) {
+            LOGGER.warn("Spotify import: couldn't read source {} for {}", source, owner.userId(), e);
+            sendText(exchange, 502, "Couldn't read that Spotify playlist.");
+            return;
+        }
+
+        startImport(owner, target, tracks);
+        sendJson(exchange, Map.of("started", tracks.size(), "playlist", target.name(), "playlistId", target.id()));
+    }
+
+    /**
+     * Runs the import on a background daemon thread (each YouTube match takes seconds; a full playlist
+     * would otherwise block a web thread for minutes). Progress is published via {@link #imports} and
+     * polled by {@code GET /api/spotify/import/status}.
+     */
+    private void startImport(TokenOwner owner, Playlist target, List<SpotifyTrack> tracks) {
+        ImportProgress progress = new ImportProgress(target.name(), tracks.size());
+        imports.put(owner.userId(), progress);
+        Thread thread = new Thread(
+                () -> {
+                    try {
+                        for (SpotifyTrack track : tracks) {
+                            String query = "ytsearch:"
+                                    + (track.artist() == null ? track.name() : track.artist() + " " + track.name());
+                            try {
+                                AudioTrackInfo info = PlayerManager.getInstance()
+                                        .resolve(query)
+                                        .get(RESOLVE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                                if (info != null) {
+                                    playlistService.addTrackWithMetadata(
+                                            owner.userId(),
+                                            owner.userName(),
+                                            target.id(),
+                                            info,
+                                            track.artist(),
+                                            track.album(),
+                                            track.name());
+                                    progress.added.incrementAndGet();
+                                }
+                            } catch (Exception e) {
+                                LOGGER.warn("Spotify import: no YouTube match for '{}'", query);
+                            }
+                            progress.processed.incrementAndGet();
+                        }
+                    } finally {
+                        progress.done = true;
+                        LOGGER.info(
+                                "Spotify import for {} into '{}': matched {}/{}",
+                                owner.userId(),
+                                target.name(),
+                                progress.added.get(),
+                                progress.total);
+                    }
+                },
+                "spotify-import-" + owner.userId());
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    /** Returns a valid (refreshed if needed) access token for the user, or {@code null} if unconnected. */
+    private String validAccessToken(String userId) {
+        SpotifyAccount account = playlistService.getSpotifyAccount(userId);
+        if (account == null || spotifyService == null) {
+            return null;
+        }
+        if (account.expiresAt().isAfter(Instant.now().plusSeconds(TOKEN_REFRESH_MARGIN_SECONDS))) {
+            return account.accessToken();
+        }
+        try {
+            Tokens tokens = spotifyService.refresh(account.refreshToken());
+            String refresh = tokens.refreshToken() != null ? tokens.refreshToken() : account.refreshToken();
+            String scope = tokens.scope() != null ? tokens.scope() : account.scope();
+            Instant expiresAt =
+                    Instant.now().plusSeconds(Math.max(0, tokens.expiresInSeconds() - TOKEN_REFRESH_MARGIN_SECONDS));
+            playlistService.saveSpotifyAccount(
+                    userId, tokens.accessToken(), refresh, expiresAt, scope, account.spotifyUserId());
+            return tokens.accessToken();
+        } catch (Exception e) {
+            LOGGER.warn("Spotify token refresh failed for {}", userId, e);
+            return null;
+        }
+    }
+
+    private void redirect(HttpExchange exchange, String location) throws IOException {
+        exchange.getResponseHeaders().set("Location", location.isEmpty() ? "/" : location);
+        exchange.sendResponseHeaders(302, -1);
+        exchange.close();
     }
 
     // ---- response helpers -------------------------------------------------------------------

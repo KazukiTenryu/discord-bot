@@ -29,8 +29,7 @@ public class MetadataService {
             HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(8)).build();
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    private static final String SEARCH_URL =
-            "https://itunes.apple.com/search?media=music&entity=song&limit=1&term=%s";
+    private static final String SEARCH_URL = "https://itunes.apple.com/search?media=music&entity=song&limit=1&term=%s";
 
     /** Canonical metadata for a track; any field may be {@code null} if the source didn't supply it. */
     public record TrackMetadata(String artist, String album, String title, String artworkUrl) {}
@@ -83,10 +82,8 @@ public class MetadataService {
         if (title == null || title.isBlank()) {
             return author == null ? "" : author.trim();
         }
-        String cleaned = title
-                .replaceAll("[(\\[\\{].*?[)\\]\\}]", " ") // (Official Video), [HD], {…}
-                .replaceAll(
-                        "(?i)\\b(official\\s*)?(music\\s*)?(video|audio|lyrics?|visualizer|mv|hd|4k|hq)\\b", " ")
+        String cleaned = title.replaceAll("[(\\[\\{].*?[)\\]\\}]", " ") // (Official Video), [HD], {…}
+                .replaceAll("(?i)\\b(official\\s*)?(music\\s*)?(video|audio|lyrics?|visualizer|mv|hd|4k|hq)\\b", " ")
                 .replaceAll("(?i)\\b(feat|ft)\\.?\\b", " ")
                 .replaceAll("[|\\-–—]+", " ")
                 .replaceAll("\\s+", " ")
