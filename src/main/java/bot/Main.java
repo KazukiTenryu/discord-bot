@@ -54,6 +54,11 @@ public class Main {
             PlayerManager.init(config.youtubeOauthRefreshToken());
 
             PlaylistService playlistService = new PlaylistService(database);
+            // Enrich any pre-metadata tracks (artist/album NULL) in the background so the network
+            // lookups never block startup; it throttles itself and exits when there's nothing to do.
+            Thread metadataBackfill = new Thread(playlistService::backfillMetadata, "metadata-backfill");
+            metadataBackfill.setDaemon(true);
+            metadataBackfill.start();
             SlashCommandRepository slashCommandRepository =
                     new SlashCommandRepository(config, database, playlistService);
 

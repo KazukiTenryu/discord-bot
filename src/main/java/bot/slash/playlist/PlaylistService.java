@@ -9,11 +9,15 @@ import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.List;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jooq.Field;
 
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 
 import bot.database.Database;
+import bot.utils.MetadataService;
+import bot.utils.MetadataService.TrackMetadata;
 
 /**
  * Persistence for the per-user playlists. Each user owns a single playlist made up of all their
@@ -21,8 +25,20 @@ import bot.database.Database;
  * and the web API (see {@code bot.web}).
  */
 public class PlaylistService {
-    /** A stored track, as needed by both the {@code /playlist} embeds and the web API. */
-    public record StoredTrack(int id, String title, String author, String uri, int durationMs, String thumbnailUrl) {}
+    /**
+     * A stored track, as needed by both the {@code /playlist} embeds and the web API. {@code author}
+     * is the source (YouTube channel) name; {@code artist} and {@code album} are the resolved
+     * metadata and may be {@code null} when no match was found.
+     */
+    public record StoredTrack(
+            int id,
+            String title,
+            String author,
+            String uri,
+            int durationMs,
+            String thumbnailUrl,
+            String artist,
+            String album) {}
 
     /** A user who owns at least one track, with their latest known display name and track count. */
     public record PlaylistOwner(String userId, String userName, int trackCount) {}
@@ -34,10 +50,14 @@ public class PlaylistService {
     public record PlaylistImage(String contentType, byte[] data) {}
 
     // 24 random bytes → 32-char url-safe token; ample entropy and clean in a URL.
+    private static final Logger LOGGER = LogManager.getLogger(PlaylistService.class);
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final Base64.Encoder TOKEN_ENCODER = Base64.getUrlEncoder().withoutPadding();
+    // Throttle between backfill lookups to stay friendly to the public iTunes API.
+    private static final long BACKFILL_DELAY_MS = 1200;
 
     private final Database database;
+    private final MetadataService metadataService = new MetadataService();
 
     public PlaylistService(Database database) {
         this.database = database;
@@ -45,12 +65,16 @@ public class PlaylistService {
 
     /**
      * Appends {@code info} to {@code userId}'s playlist, refreshing the stored display name, and
-     * returns the new row's id.
+     * returns the stored row (including any resolved artist/album metadata). The metadata lookup is
+     * best-effort and runs before the DB write so it never holds a connection during network I/O.
      */
-    public int addTrack(String userId, String userName, AudioTrackInfo info) {
+    public StoredTrack addTrack(String userId, String userName, AudioTrackInfo info) {
         // duration_ms is an INTEGER column (ms comfortably fits an int); streams have no real length.
         int durationMs = info.isStream ? 0 : (int) Math.min(info.length, Integer.MAX_VALUE);
-        return database.writeAndProvide(ctx -> ctx.insertInto(PLAYLIST_TRACKS)
+        TrackMetadata md = metadataService.lookup(info.title, info.author).orElse(null);
+        String artist = md != null ? md.artist() : null;
+        String album = md != null ? md.album() : null;
+        int id = database.writeAndProvide(ctx -> ctx.insertInto(PLAYLIST_TRACKS)
                 .set(PLAYLIST_TRACKS.USER_ID, userId)
                 .set(PLAYLIST_TRACKS.USER_NAME, userName)
                 .set(PLAYLIST_TRACKS.TITLE, info.title)
@@ -58,9 +82,48 @@ public class PlaylistService {
                 .set(PLAYLIST_TRACKS.URI, info.uri)
                 .set(PLAYLIST_TRACKS.DURATION_MS, durationMs)
                 .set(PLAYLIST_TRACKS.THUMBNAIL_URL, info.artworkUrl)
+                .set(PLAYLIST_TRACKS.ARTIST, artist)
+                .set(PLAYLIST_TRACKS.ALBUM, album)
                 .returning(PLAYLIST_TRACKS.ID)
                 .fetchOne()
                 .getId());
+        return new StoredTrack(id, info.title, info.author, info.uri, durationMs, info.artworkUrl, artist, album);
+    }
+
+    /**
+     * One-time enrichment of rows added before metadata lookup existed ({@code artist IS NULL}).
+     * Best-effort and throttled to stay friendly to the public iTunes API; intended to run on a
+     * background daemon thread so it never blocks startup.
+     */
+    public void backfillMetadata() {
+        List<StoredTrack> pending = database.read(ctx -> ctx.selectFrom(PLAYLIST_TRACKS)
+                .where(PLAYLIST_TRACKS.ARTIST.isNull())
+                .orderBy(PLAYLIST_TRACKS.ID.asc())
+                .fetch(PlaylistService::toStoredTrack));
+        if (pending.isEmpty()) {
+            return;
+        }
+        LOGGER.info("Backfilling track metadata for {} row(s)…", pending.size());
+        int enriched = 0;
+        for (StoredTrack t : pending) {
+            TrackMetadata md = metadataService.lookup(t.title(), t.author()).orElse(null);
+            if (md != null && (md.artist() != null || md.album() != null)) {
+                database.write(ctx -> ctx.update(PLAYLIST_TRACKS)
+                        .set(PLAYLIST_TRACKS.ARTIST, md.artist())
+                        .set(PLAYLIST_TRACKS.ALBUM, md.album())
+                        .where(PLAYLIST_TRACKS.ID.eq(t.id()))
+                        .execute());
+                enriched++;
+            }
+            try {
+                Thread.sleep(BACKFILL_DELAY_MS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                LOGGER.info("Metadata backfill interrupted after {} row(s).", enriched);
+                return;
+            }
+        }
+        LOGGER.info("Metadata backfill complete: enriched {}/{} row(s).", enriched, pending.size());
     }
 
     /** A user's tracks in insertion order (oldest first). */
@@ -204,6 +267,8 @@ public class PlaylistService {
                 record.get(PLAYLIST_TRACKS.AUTHOR),
                 record.get(PLAYLIST_TRACKS.URI),
                 duration == null ? 0 : duration,
-                record.get(PLAYLIST_TRACKS.THUMBNAIL_URL));
+                record.get(PLAYLIST_TRACKS.THUMBNAIL_URL),
+                record.get(PLAYLIST_TRACKS.ARTIST),
+                record.get(PLAYLIST_TRACKS.ALBUM));
     }
 }

@@ -92,14 +92,18 @@ public class PlaylistCommand extends SlashCommand {
                 return;
             }
 
-            playlistService.addTrack(userId, userName, info);
+            StoredTrack stored = playlistService.addTrack(userId, userName, info);
+            String by = stored.artist() != null ? stored.artist() : info.author;
 
             EmbedBuilder embed = new EmbedBuilder()
                     .setColor(ACCENT)
                     .setTitle("➕ Added to your playlist")
-                    .setDescription("**[" + info.title + "](" + info.uri + ")**\nby " + info.author);
+                    .setDescription("**[" + info.title + "](" + info.uri + ")**\nby " + by);
             if (!info.isStream) {
                 embed.addField("Duration", MusicFormat.duration(info.length), true);
+            }
+            if (stored.album() != null) {
+                embed.addField("Album", stored.album(), true);
             }
             if (info.artworkUrl != null) {
                 embed.setThumbnail(info.artworkUrl);

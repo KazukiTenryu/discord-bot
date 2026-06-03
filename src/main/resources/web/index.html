@@ -1029,7 +1029,7 @@
     img.src = t.thumbnailUrl || FALLBACK_ART;
     img.onerror = () => { img.src = FALLBACK_ART; };
     row.querySelector(".title").textContent = t.title;
-    row.querySelector(".author").textContent = t.author || "";
+    row.querySelector(".author").textContent = t.artist || t.author || ""; // prefer resolved artist over channel
     row.dataset.search = ((t.title || "") + " " + (t.author || "")).toLowerCase();
     row.dataset.uri = t.uri || "";   // lets highlight() match search results, which have no id
     if (idx != null) row.querySelector(".idx").dataset.n = idx;
@@ -1192,7 +1192,7 @@
     refreshLyrics();
     if ("mediaSession" in navigator) {
       navigator.mediaSession.metadata = new MediaMetadata({
-        title: t.title, artist: t.author || "", album: playlistName,
+        title: t.title, artist: t.artist || t.author || "", album: t.album || playlistName,
         artwork: t.thumbnailUrl ? [{ src: t.thumbnailUrl, sizes: "512x512" }] : [],
       });
     }
@@ -1201,8 +1201,9 @@
   function renderTrack(t) {
     const art = t.thumbnailUrl || FALLBACK_ART;
     miniArt.src = art; miniArt.onerror = () => { miniArt.src = FALLBACK_ART; };
-    miniTitle.textContent = t.title; miniAuthor.textContent = t.author || "";
-    npTitle.textContent = t.title; npAuthor.textContent = t.author || "";
+    const artist = t.artist || t.author || "";
+    miniTitle.textContent = t.title; miniAuthor.textContent = artist;
+    npTitle.textContent = t.title; npAuthor.textContent = t.album ? (artist + " · " + t.album) : artist;
     npSource.textContent = playlistName || "—";
     npArt.src = art; npArt.onerror = () => { npArt.src = FALLBACK_ART; };
     npBg.style.backgroundImage = "url('" + art.replace(/'/g, "%27") + "')";

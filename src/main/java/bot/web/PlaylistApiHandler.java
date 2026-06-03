@@ -320,9 +320,7 @@ public class PlaylistApiHandler implements HttpHandler {
             sendText(exchange, 502, "Couldn't add that track.");
             return;
         }
-        int id = playlistService.addTrack(owner.userId(), owner.userName(), info);
-        int durationMs = info.isStream ? 0 : (int) Math.min(info.length, Integer.MAX_VALUE);
-        sendJson(exchange, new StoredTrack(id, info.title, info.author, info.uri, durationMs, info.artworkUrl));
+        sendJson(exchange, playlistService.addTrack(owner.userId(), owner.userName(), info));
     }
 
     private void handleRemoveTrack(HttpExchange exchange, String idPart) throws IOException {
