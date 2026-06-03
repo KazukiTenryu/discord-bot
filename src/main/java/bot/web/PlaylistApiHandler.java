@@ -202,7 +202,8 @@ public class PlaylistApiHandler implements HttpHandler {
             return;
         }
         if (path.equals("/api/discover")) {
-            sendJson(exchange, discoverService.discover());
+            String country = queryParam(exchange, "country");
+            sendJson(exchange, country == null ? discoverService.discover() : discoverService.discover(country));
             return;
         }
         if (path.equals("/api/lyrics")) {

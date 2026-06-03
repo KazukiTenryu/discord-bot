@@ -7,7 +7,9 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -36,7 +38,7 @@ public class DiscoverService {
             HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(8)).build();
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    private static final String STOREFRONT = "us";
+    private static final String DEFAULT_COUNTRY = "us";
     private static final int SHELF_SIZE = 20;
     private static final long CACHE_TTL_MS = 3L * 60 * 60 * 1000; // charts move slowly; refresh every 3h
 
@@ -71,18 +73,36 @@ public class DiscoverService {
             new GenreShelf(13, "New Age", 180),
             new GenreShelf(22, "Christian & Gospel", 60));
 
-    private volatile List<DiscoverShelf> cache;
-    private volatile long cachedAt;
+    private record Cached(long at, List<DiscoverShelf> shelves) {}
+
+    // One cache entry per storefront (country), so the Discover and Charts pages share the US data.
+    private final Map<String, Cached> cache = new ConcurrentHashMap<>();
+
+    /** Discover shelves for the default (US) storefront. */
+    public List<DiscoverShelf> discover() {
+        return discover(DEFAULT_COUNTRY);
+    }
 
     /**
-     * The Discover shelves, rebuilt from Apple at most once per {@link #CACHE_TTL_MS}. Never throws.
-     * The ~20 feeds are fetched in parallel (then assembled in display order) so a cold refresh takes
-     * about as long as the single slowest feed rather than their sum.
+     * Discover shelves for a storefront (e.g. {@code "us"}, {@code "gb"}, {@code "jp"}), rebuilt from
+     * Apple at most once per {@link #CACHE_TTL_MS} per country. Never throws. The ~20 feeds are fetched
+     * in parallel so a cold refresh takes about as long as the single slowest feed, not their sum.
      */
-    public synchronized List<DiscoverShelf> discover() {
+    public List<DiscoverShelf> discover(String country) {
+        String cc = normalizeCountry(country);
         long now = System.currentTimeMillis();
-        if (cache != null && (now - cachedAt) < CACHE_TTL_MS) {
-            return cache;
+        Cached hit = cache.get(cc);
+        if (hit != null && (now - hit.at()) < CACHE_TTL_MS) {
+            return hit.shelves();
+        }
+        return rebuild(cc, now);
+    }
+
+    private synchronized List<DiscoverShelf> rebuild(String cc, long now) {
+        // Re-check under the lock so concurrent first-hits for the same country don't all fetch.
+        Cached hit = cache.get(cc);
+        if (hit != null && (now - hit.at()) < CACHE_TTL_MS) {
+            return hit.shelves();
         }
         ExecutorService pool = Executors.newFixedThreadPool(8, r -> {
             Thread t = new Thread(r, "discover-fetch");
@@ -93,7 +113,7 @@ public class DiscoverService {
             List<CompletableFuture<DiscoverShelf>> futures = new ArrayList<>();
             // Index 0: the overall "Trending now" Top shelf (ranked); then one per genre, in order.
             futures.add(CompletableFuture.supplyAsync(
-                    () -> shelf("Trending now", "top", 142, true, fetchTopSongs()), pool));
+                    () -> shelf("Trending now", "top", 142, true, fetchTopSongs(cc)), pool));
             for (GenreShelf genre : GENRES) {
                 futures.add(CompletableFuture.supplyAsync(
                         () -> shelf(
@@ -101,7 +121,7 @@ public class DiscoverService {
                                 "g" + genre.genreId(),
                                 genre.accent(),
                                 false,
-                                fetchGenre(genre.genreId())),
+                                fetchGenre(cc, genre.genreId())),
                         pool));
             }
             List<DiscoverShelf> shelves = new ArrayList<>();
@@ -112,18 +132,26 @@ public class DiscoverService {
                         shelves.add(s);
                     }
                 } catch (Exception e) {
-                    LOGGER.warn("A discover shelf failed to load", e);
+                    LOGGER.warn("A discover shelf failed to load for {}", cc, e);
                 }
             }
             if (!shelves.isEmpty()) {
-                cache = shelves;
-                cachedAt = now;
+                cache.put(cc, new Cached(now, shelves));
             }
-            // If everything failed but we have a stale cache, serve that rather than nothing.
-            return shelves.isEmpty() && cache != null ? cache : shelves;
+            // If everything failed but we have a stale entry, serve that rather than nothing.
+            return shelves.isEmpty() && hit != null ? hit.shelves() : shelves;
         } finally {
             pool.shutdownNow();
         }
+    }
+
+    /** Sanitises a storefront code to a safe 2-letter lowercase value, defaulting to {@code "us"}. */
+    private static String normalizeCountry(String country) {
+        if (country == null) {
+            return DEFAULT_COUNTRY;
+        }
+        String cc = country.trim().toLowerCase();
+        return cc.matches("[a-z]{2}") ? cc : DEFAULT_COUNTRY;
     }
 
     private static DiscoverShelf shelf(
@@ -132,8 +160,8 @@ public class DiscoverService {
     }
 
     /** Overall most-played, via the marketing-tools JSON feed ({@code feed.results[]}). */
-    private List<DiscoverTrack> fetchTopSongs() {
-        String url = "https://rss.marketingtools.apple.com/api/v2/" + STOREFRONT + "/music/most-played/" + SHELF_SIZE
+    private List<DiscoverTrack> fetchTopSongs(String country) {
+        String url = "https://rss.marketingtools.apple.com/api/v2/" + country + "/music/most-played/" + SHELF_SIZE
                 + "/songs.json";
         List<DiscoverTrack> out = new ArrayList<>();
         JsonNode root = get(url);
@@ -150,9 +178,9 @@ public class DiscoverService {
     }
 
     /** Per-genre top songs, via the classic iTunes RSS feed ({@code feed.entry[]}). */
-    private List<DiscoverTrack> fetchGenre(int genreId) {
-        String url = "https://itunes.apple.com/" + STOREFRONT + "/rss/topsongs/limit=" + SHELF_SIZE + "/genre="
-                + genreId + "/json";
+    private List<DiscoverTrack> fetchGenre(String country, int genreId) {
+        String url = "https://itunes.apple.com/" + country + "/rss/topsongs/limit=" + SHELF_SIZE + "/genre=" + genreId
+                + "/json";
         List<DiscoverTrack> out = new ArrayList<>();
         JsonNode root = get(url);
         if (root == null) {
