@@ -708,6 +708,21 @@
   }
   function initial(name) { return (name || "?").trim().charAt(0).toUpperCase(); }
 
+  // Strips "(Official Video)"-style noise from a raw title. Only removes bracketed groups that
+  // contain a known junk word, so meaningful parentheticals (e.g. "(Remix)") are kept.
+  function cleanTitle(s) {
+    if (!s) return s || "";
+    const out = s
+      .replace(/[([{][^)\]}]*\b(official|lyrics?|audio|video|visualizer|mv|hd|hq|4k|explicit|remaster(?:ed)?)\b[^)\]}]*[)\]}]/gi, "")
+      .replace(/[([{]\s*[)\]}]/g, "")
+      .replace(/\s*[-–—|]\s*$/, "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+    return out || s;
+  }
+  // Prefer the resolved canonical name; otherwise clean the raw title.
+  function displayTitle(t) { return t.trackName || cleanTitle(t.title); }
+
   // If the user has uploaded a cover, swap it into their avatar circle; otherwise keep the
   // coloured initial. (Public endpoint, 404 → no image, so the probe just never fires onload.)
   function applyCover(el, userId) {
@@ -1028,7 +1043,7 @@
     const img = row.querySelector(".art");
     img.src = t.thumbnailUrl || FALLBACK_ART;
     img.onerror = () => { img.src = FALLBACK_ART; };
-    row.querySelector(".title").textContent = t.title;
+    row.querySelector(".title").textContent = displayTitle(t);
     row.querySelector(".author").textContent = t.artist || t.author || ""; // prefer resolved artist over channel
     row.dataset.search = ((t.title || "") + " " + (t.author || "")).toLowerCase();
     row.dataset.uri = t.uri || "";   // lets highlight() match search results, which have no id
@@ -1192,7 +1207,7 @@
     refreshLyrics();
     if ("mediaSession" in navigator) {
       navigator.mediaSession.metadata = new MediaMetadata({
-        title: t.title, artist: t.artist || t.author || "", album: t.album || playlistName,
+        title: displayTitle(t), artist: t.artist || t.author || "", album: t.album || playlistName,
         artwork: t.thumbnailUrl ? [{ src: t.thumbnailUrl, sizes: "512x512" }] : [],
       });
     }
@@ -1202,8 +1217,9 @@
     const art = t.thumbnailUrl || FALLBACK_ART;
     miniArt.src = art; miniArt.onerror = () => { miniArt.src = FALLBACK_ART; };
     const artist = t.artist || t.author || "";
-    miniTitle.textContent = t.title; miniAuthor.textContent = artist;
-    npTitle.textContent = t.title; npAuthor.textContent = t.album ? (artist + " · " + t.album) : artist;
+    const dt = displayTitle(t);
+    miniTitle.textContent = dt; miniAuthor.textContent = artist;
+    npTitle.textContent = dt; npAuthor.textContent = t.album ? (artist + " · " + t.album) : artist;
     npSource.textContent = playlistName || "—";
     npArt.src = art; npArt.onerror = () => { npArt.src = FALLBACK_ART; };
     npBg.style.backgroundImage = "url('" + art.replace(/'/g, "%27") + "')";

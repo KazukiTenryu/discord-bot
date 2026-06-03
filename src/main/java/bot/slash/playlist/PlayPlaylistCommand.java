@@ -80,7 +80,11 @@ public class PlayPlaylistCommand extends MusicCommand {
         int preview = Math.min(tracks.size(), PREVIEW_LINES);
         for (int i = 0; i < preview; i++) {
             StoredTrack track = tracks.get(i);
-            description.append("**").append(i + 1).append(".** ").append(track.title());
+            description
+                    .append("**")
+                    .append(i + 1)
+                    .append(".** ")
+                    .append(track.trackName() != null ? track.trackName() : track.title());
             if (track.durationMs() > 0) {
                 description
                         .append(" `")

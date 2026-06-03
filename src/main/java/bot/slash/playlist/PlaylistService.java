@@ -26,9 +26,11 @@ import bot.utils.MetadataService.TrackMetadata;
  */
 public class PlaylistService {
     /**
-     * A stored track, as needed by both the {@code /playlist} embeds and the web API. {@code author}
-     * is the source (YouTube channel) name; {@code artist} and {@code album} are the resolved
-     * metadata and may be {@code null} when no match was found.
+     * A stored track, as needed by both the {@code /playlist} embeds and the web API. {@code title}
+     * is the raw source title (kept for lyrics/search/filenames); {@code author} is the source
+     * (YouTube channel) name; {@code artist}, {@code album} and {@code trackName} are the resolved
+     * metadata and may be {@code null} when no match was found. Display the canonical
+     * {@code trackName} when present, falling back to {@code title}.
      */
     public record StoredTrack(
             int id,
@@ -38,7 +40,8 @@ public class PlaylistService {
             int durationMs,
             String thumbnailUrl,
             String artist,
-            String album) {}
+            String album,
+            String trackName) {}
 
     /** A user who owns at least one track, with their latest known display name and track count. */
     public record PlaylistOwner(String userId, String userName, int trackCount) {}
@@ -74,6 +77,7 @@ public class PlaylistService {
         TrackMetadata md = metadataService.lookup(info.title, info.author).orElse(null);
         String artist = md != null ? md.artist() : null;
         String album = md != null ? md.album() : null;
+        String trackName = md != null ? md.title() : null;
         int id = database.writeAndProvide(ctx -> ctx.insertInto(PLAYLIST_TRACKS)
                 .set(PLAYLIST_TRACKS.USER_ID, userId)
                 .set(PLAYLIST_TRACKS.USER_NAME, userName)
@@ -84,10 +88,12 @@ public class PlaylistService {
                 .set(PLAYLIST_TRACKS.THUMBNAIL_URL, info.artworkUrl)
                 .set(PLAYLIST_TRACKS.ARTIST, artist)
                 .set(PLAYLIST_TRACKS.ALBUM, album)
+                .set(PLAYLIST_TRACKS.TRACK_NAME, trackName)
                 .returning(PLAYLIST_TRACKS.ID)
                 .fetchOne()
                 .getId());
-        return new StoredTrack(id, info.title, info.author, info.uri, durationMs, info.artworkUrl, artist, album);
+        return new StoredTrack(
+                id, info.title, info.author, info.uri, durationMs, info.artworkUrl, artist, album, trackName);
     }
 
     /**
@@ -107,10 +113,11 @@ public class PlaylistService {
         int enriched = 0;
         for (StoredTrack t : pending) {
             TrackMetadata md = metadataService.lookup(t.title(), t.author()).orElse(null);
-            if (md != null && (md.artist() != null || md.album() != null)) {
+            if (md != null && (md.artist() != null || md.album() != null || md.title() != null)) {
                 database.write(ctx -> ctx.update(PLAYLIST_TRACKS)
                         .set(PLAYLIST_TRACKS.ARTIST, md.artist())
                         .set(PLAYLIST_TRACKS.ALBUM, md.album())
+                        .set(PLAYLIST_TRACKS.TRACK_NAME, md.title())
                         .where(PLAYLIST_TRACKS.ID.eq(t.id()))
                         .execute());
                 enriched++;
@@ -269,6 +276,7 @@ public class PlaylistService {
                 duration == null ? 0 : duration,
                 record.get(PLAYLIST_TRACKS.THUMBNAIL_URL),
                 record.get(PLAYLIST_TRACKS.ARTIST),
-                record.get(PLAYLIST_TRACKS.ALBUM));
+                record.get(PLAYLIST_TRACKS.ALBUM),
+                record.get(PLAYLIST_TRACKS.TRACK_NAME));
     }
 }

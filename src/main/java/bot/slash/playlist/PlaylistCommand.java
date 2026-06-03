@@ -94,11 +94,12 @@ public class PlaylistCommand extends SlashCommand {
 
             StoredTrack stored = playlistService.addTrack(userId, userName, info);
             String by = stored.artist() != null ? stored.artist() : info.author;
+            String name = stored.trackName() != null ? stored.trackName() : info.title;
 
             EmbedBuilder embed = new EmbedBuilder()
                     .setColor(ACCENT)
                     .setTitle("➕ Added to your playlist")
-                    .setDescription("**[" + info.title + "](" + info.uri + ")**\nby " + by);
+                    .setDescription("**[" + name + "](" + info.uri + ")**\nby " + by);
             if (!info.isStream) {
                 embed.addField("Duration", MusicFormat.duration(info.length), true);
             }
@@ -138,7 +139,7 @@ public class PlaylistCommand extends SlashCommand {
                     .append("**")
                     .append(i + 1)
                     .append(".** [")
-                    .append(track.title())
+                    .append(track.trackName() != null ? track.trackName() : track.title())
                     .append("](")
                     .append(track.uri())
                     .append(")");
