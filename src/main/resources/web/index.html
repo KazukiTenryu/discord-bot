@@ -113,6 +113,7 @@
   }
   .banner-inner { display: flex; align-items: flex-end; gap: 24px; padding-top: 26px; max-width: 1100px; margin: 0 auto; }
   .banner-cover {
+    position: relative;
     width: 196px; height: 196px; flex: 0 0 auto; border-radius: 8px; overflow: hidden;
     box-shadow: 0 18px 44px rgba(0,0,0,0.5);
   }
@@ -120,6 +121,18 @@
     background: linear-gradient(135deg, hsl(var(--hue) 66% 60%), hsl(var(--hue) 60% 30%)); }
   .banner-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .banner-cover.collage { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+  /* owner-only cover editor */
+  .banner-cover.editable { cursor: pointer; }
+  .cover-edit {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 8px; background: rgba(0,0,0,0.55); color: #fff; font-size: 13px; font-weight: 700;
+    opacity: 0; transition: opacity .15s ease;
+  }
+  .cover-edit svg { width: 32px; height: 32px; fill: currentColor; }
+  .banner-cover.editable:hover .cover-edit { opacity: 1; }
+  .cover-badge { position: absolute; right: 8px; bottom: 8px; width: 30px; height: 30px; border-radius: 50%; background: rgba(0,0,0,0.6); display: grid; place-items: center; pointer-events: none; }
+  .cover-badge svg { width: 16px; height: 16px; fill: #fff; }
+  @media (hover: hover) { .banner-cover .cover-badge { display: none; } } /* desktop relies on the hover overlay */
   .banner-meta { min-width: 0; padding-bottom: 6px; flex: 1 1 auto; }
   .banner-meta .kind { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; }
   .banner-meta h1.bn { font-size: clamp(34px, 7vw, 80px); line-height: 1.04; font-weight: 900; letter-spacing: -0.03em; margin: 10px 0 16px; word-break: break-word; }
@@ -575,6 +588,7 @@
   const ICON_PLUS = '<svg viewBox="0 0 24 24"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>';
   const ICON_DL = '<svg viewBox="0 0 24 24"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>';
   const ICON_DOTS = '<svg viewBox="0 0 24 24"><path d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/></svg>';
+  const ICON_CAMERA = '<svg viewBox="0 0 24 24"><path d="M9 3 7.2 5H4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9zm3 5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>';
 
   const PLAY_PATH = "M8 5v14l11-7z";
   const PAUSE_PATH = "M6 5h4v14H6zm8 0h4v14h-4z";
@@ -594,6 +608,7 @@
   let me = null;           // {userId, userName} once a valid token is loaded
   let lastVolume = 100;
   const lyricsCache = {};  // trackId -> string | null (null = looked up, none found)
+  const imageBust = {};    // userId -> timestamp, to refresh a cover right after the owner uploads one
 
   // ---- token / identity ------------------------------------------------------
   let authToken = null;
@@ -710,7 +725,7 @@
         list.appendChild(row);
       });
       view.innerHTML = "";
-      view.appendChild(buildBanner(user, tracks));
+      view.appendChild(buildBanner(user, tracks, canEdit));
 
       const container = document.createElement("div");
       container.className = "container";
@@ -785,15 +800,88 @@
     return sec + " sec";
   }
 
-  function buildBanner(user, tracks) {
+  function coverUrl(userId) {
+    return "/api/users/" + encodeURIComponent(userId) + "/image" + (imageBust[userId] ? "?v=" + imageBust[userId] : "");
+  }
+
+  // Shrink/normalise a chosen image in the browser so uploads stay tiny (and clear of any
+  // proxy body-size limit). Falls back to the original file if the canvas pipeline fails.
+  async function downscaleImage(file, max) {
+    try {
+      const bmp = await createImageBitmap(file);
+      const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+      const w = Math.max(1, Math.round(bmp.width * scale));
+      const h = Math.max(1, Math.round(bmp.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(bmp, 0, 0, w, h);
+      if (bmp.close) bmp.close();
+      const blob = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.85));
+      if (blob && blob.size > 0) return blob;
+    } catch (e) { /* unsupported format / no canvas — send the original */ }
+    return file;
+  }
+
+  function buildBanner(user, tracks, canEdit) {
     const banner = document.createElement("div");
     banner.id = "banner"; banner.className = "banner";
     banner.style.setProperty("--hue", hueFor(user.userId || user.userName || "?"));
 
-    // Always a gradient cover (like Spotify's "Liked Songs") — never a track's album art.
+    // Cover: the owner's custom image if set, else a generated gradient (like Spotify's "Liked Songs").
+    const initial = (user.userName || "?").trim().charAt(0).toUpperCase();
     const cover = document.createElement("div");
-    cover.className = "banner-cover gradient";
-    cover.textContent = (user.userName || "?").trim().charAt(0).toUpperCase();
+    const editorHtml = canEdit
+      ? '<div class="cover-edit">' + ICON_CAMERA + "<span>Change</span></div>" +
+        '<div class="cover-badge">' + ICON_CAMERA + "</div>"
+      : "";
+    function renderGradient() {
+      cover.className = "banner-cover gradient" + (canEdit ? " editable" : "");
+      cover.innerHTML = "";
+      cover.append(document.createTextNode(initial));
+      if (editorHtml) cover.insertAdjacentHTML("beforeend", editorHtml);
+    }
+    function renderImage(src) {
+      cover.className = "banner-cover" + (canEdit ? " editable" : "");
+      cover.innerHTML = '<img alt="" />' + editorHtml;
+      const im = cover.querySelector("img");
+      im.onerror = renderGradient; // image missing/failed → fall back to the gradient
+      im.src = src;
+    }
+    renderGradient();
+    // Probe for a custom cover; swap in if one exists (avoids a flash for gradient-only playlists).
+    const probe = new Image();
+    const src = coverUrl(user.userId);
+    probe.onload = () => renderImage(src);
+    probe.src = src;
+
+    if (canEdit) {
+      const fileInput = document.createElement("input");
+      fileInput.type = "file"; fileInput.accept = "image/*";
+      // Visually hidden but NOT display:none — Safari/iOS won't open the picker from .click()
+      // on a display:none input.
+      fileInput.style.cssText = "position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);border:0;";
+      cover.addEventListener("click", () => fileInput.click());
+      fileInput.addEventListener("change", async () => {
+        const file = fileInput.files && fileInput.files[0];
+        fileInput.value = "";
+        if (!file) return;
+        if (!file.type.startsWith("image/")) { toast("Please choose an image."); return; }
+        toast("Uploading cover…");
+        try {
+          const blob = await downscaleImage(file, 800); // keep covers small & under any proxy limit
+          const res = await fetch("/api/playlist/image", {
+            method: "POST",
+            headers: { "Content-Type": blob.type || file.type, "X-Playlist-Token": authToken },
+            body: blob,
+          });
+          if (!res.ok) throw new Error(res.status === 413 ? "image too large" : "HTTP " + res.status);
+          imageBust[user.userId] = Date.now();
+          renderImage(coverUrl(user.userId));
+          toast("Cover updated.");
+        } catch (e) { toast("Couldn’t update the cover — " + e.message + "."); }
+      });
+      banner.appendChild(fileInput);
+    }
 
     const ms = tracks.reduce((a, t) => a + (t.durationMs || 0), 0);
     const meta = document.createElement("div");

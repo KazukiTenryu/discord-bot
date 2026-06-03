@@ -30,6 +30,9 @@ public class PlaylistService {
     /** The Discord user a web-player token belongs to. */
     public record TokenOwner(String userId, String userName) {}
 
+    /** A user's custom playlist cover image. */
+    public record PlaylistImage(String contentType, byte[] data) {}
+
     // 24 random bytes → 32-char url-safe token; ample entropy and clean in a URL.
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final Base64.Encoder TOKEN_ENCODER = Base64.getUrlEncoder().withoutPadding();
@@ -145,6 +148,29 @@ public class PlaylistService {
                 .where(PLAYLIST_TOKENS.TOKEN.eq(token))
                 .fetchOne(record ->
                         new TokenOwner(record.get(PLAYLIST_TOKENS.USER_ID), record.get(PLAYLIST_TOKENS.USER_NAME))));
+    }
+
+    // ---- custom cover images ---------------------------------------------------------------
+    // Accessed via jOOQ plain SQL so the BLOB table needs no generated code (one upsert/select/delete).
+
+    /** Stores (or replaces) {@code userId}'s custom playlist cover. */
+    public void setImage(String userId, String contentType, byte[] data) {
+        database.write(ctx -> ctx.execute(
+                "INSERT INTO playlist_images (user_id, content_type, data) VALUES (?, ?, ?) "
+                        + "ON CONFLICT(user_id) DO UPDATE SET content_type = excluded.content_type, "
+                        + "data = excluded.data, updated_at = datetime('now', 'localtime')",
+                userId,
+                contentType,
+                data));
+    }
+
+    /** Returns {@code userId}'s custom cover, or {@code null} if they haven't set one. */
+    public PlaylistImage getImage(String userId) {
+        return database.read(ctx -> {
+            org.jooq.Record record =
+                    ctx.fetchOne("SELECT content_type, data FROM playlist_images WHERE user_id = ?", userId);
+            return record == null ? null : new PlaylistImage(record.get(0, String.class), record.get(1, byte[].class));
+        });
     }
 
     /** Empties {@code userId}'s playlist, returning the number of tracks removed. */

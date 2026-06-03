@@ -46,6 +46,8 @@ import tools.jackson.databind.ObjectMapper;
  *   <li>{@code GET /api/me} (token) — the calling user's id and name
  *   <li>{@code POST /api/playlist/tracks} (token, body {@code {"uri": …}}) — add a track to the caller's playlist
  *   <li>{@code DELETE /api/playlist/tracks/{id}} (token) — remove one of the caller's tracks
+ *   <li>{@code GET /api/users/{userId}/image} — that user's custom cover (404 → client uses the gradient)
+ *   <li>{@code POST /api/playlist/image} (token, raw image body) — set the caller's custom cover
  * </ul>
  *
  * The audio endpoint reuses {@link PlayerManager#downloadOgg} (the same pipeline as {@code /song}).
@@ -64,6 +66,7 @@ public class PlaylistApiHandler implements HttpHandler {
     private static final long RESOLVE_TIMEOUT_SECONDS = 20;
     private static final int SEARCH_LIMIT = 12;
     private static final long MAX_BODY_BYTES = 4096;
+    private static final long IMAGE_MAX_BYTES = 3L * 1024 * 1024; // 3 MB cap for custom covers
 
     /** A search hit's metadata, mirroring {@link StoredTrack} minus the (not-yet-stored) id. */
     public record SearchResult(String title, String author, String uri, int durationMs, String thumbnailUrl) {}
@@ -104,6 +107,10 @@ public class PlaylistApiHandler implements HttpHandler {
             }
             if ("DELETE".equalsIgnoreCase(method) && path.startsWith("/api/playlist/tracks/")) {
                 handleRemoveTrack(exchange, path.substring("/api/playlist/tracks/".length()));
+                return;
+            }
+            if ("POST".equalsIgnoreCase(method) && path.equals("/api/playlist/image")) {
+                handleSetImage(exchange);
                 return;
             }
             sendText(exchange, 405, "Method Not Allowed");
@@ -149,6 +156,12 @@ public class PlaylistApiHandler implements HttpHandler {
         if (path.startsWith("/api/users/") && path.endsWith("/download")) {
             String userId = path.substring("/api/users/".length(), path.length() - "/download".length());
             handlePlaylistDownload(exchange, userId);
+            return;
+        }
+        // /api/users/{userId}/image — that user's custom cover (404 → client uses the gradient)
+        if (path.startsWith("/api/users/") && path.endsWith("/image")) {
+            String userId = path.substring("/api/users/".length(), path.length() - "/image".length());
+            handleUserImage(exchange, userId);
             return;
         }
         // /api/tracks/{id}/audio
@@ -240,6 +253,52 @@ public class PlaylistApiHandler implements HttpHandler {
             previewCache.put(uri, audio);
         }
         sendAudio(exchange, audio);
+    }
+
+    /** Stores the caller's custom playlist cover (raw image bytes in the body, type from Content-Type). */
+    private void handleSetImage(HttpExchange exchange) throws IOException {
+        TokenOwner owner = authenticate(exchange);
+        if (owner == null) {
+            sendText(exchange, 401, "Unauthorized");
+            return;
+        }
+        String contentType = exchange.getRequestHeaders().getFirst("Content-Type");
+        if (contentType == null || !contentType.toLowerCase().startsWith("image/")) {
+            sendText(exchange, 415, "Expected an image.");
+            return;
+        }
+        contentType = contentType.split(";", 2)[0].trim(); // drop any ;charset
+
+        byte[] data;
+        try (InputStream in = exchange.getRequestBody()) {
+            data = in.readNBytes((int) IMAGE_MAX_BYTES + 1);
+        }
+        if (data.length == 0) {
+            sendText(exchange, 400, "Empty body.");
+            return;
+        }
+        if (data.length > IMAGE_MAX_BYTES) {
+            sendText(exchange, 413, "Image too large (max 3 MB).");
+            return;
+        }
+        playlistService.setImage(owner.userId(), contentType, data);
+        sendText(exchange, 200, "OK");
+    }
+
+    /** Serves a user's custom cover, or 404 (the web player then shows the gradient). Public read. */
+    private void handleUserImage(HttpExchange exchange, String userId) throws IOException {
+        PlaylistService.PlaylistImage image = playlistService.getImage(userId);
+        if (image == null) {
+            sendText(exchange, 404, "No image");
+            return;
+        }
+        byte[] data = image.data();
+        exchange.getResponseHeaders().set("Content-Type", image.contentType());
+        exchange.getResponseHeaders().set("Cache-Control", "no-cache");
+        exchange.sendResponseHeaders(200, data.length);
+        try (OutputStream out = exchange.getResponseBody()) {
+            out.write(data);
+        }
     }
 
     private void handleAddTrack(HttpExchange exchange) throws IOException {
