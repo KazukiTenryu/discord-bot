@@ -26,6 +26,7 @@ import bot.slash.SlashCommandRepository;
 import bot.slash.music.PlayerManager;
 import bot.slash.playlist.PlaylistService;
 import bot.slash.playlist.SpotifyService;
+import bot.stats.StatsService;
 import bot.web.WebServer;
 import moe.kyokobot.libdave.NativeDaveFactory;
 import moe.kyokobot.libdave.jda.LDJDADaveSessionFactory;
@@ -51,8 +52,12 @@ public class Main {
             Database database = new Database("jdbc:sqlite:" + dbFile);
             metricService = new MetricService(database);
 
-            // Configure YouTube OAuth (if set) before any /play can reach the player.
-            PlayerManager.init(config.youtubeOauthRefreshToken());
+            // Listening analytics: logged by the player (track-start) and read by the web Server page.
+            StatsService statsService = new StatsService(database);
+
+            // Configure YouTube OAuth (if set) before any /play can reach the player; the player logs
+            // plays through statsService.
+            PlayerManager.init(config.youtubeOauthRefreshToken(), statsService);
 
             PlaylistService playlistService = new PlaylistService(database);
             // Enrich any pre-metadata tracks (artist/album NULL) in the background so the network
@@ -98,7 +103,7 @@ public class Main {
                     ? new SpotifyService(
                             config.spotifyClientId(), config.spotifyClientSecret(), config.spotifyRedirectUri())
                     : null;
-            new WebServer(playlistService, spotifyService, config).start();
+            new WebServer(playlistService, spotifyService, statsService, config).start();
         } catch (Exception e) {
             System.err.println("Failed to start application: " + e.getMessage());
         }

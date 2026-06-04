@@ -12,6 +12,7 @@ import com.sun.net.httpserver.HttpServer;
 import bot.config.Config;
 import bot.slash.playlist.PlaylistService;
 import bot.slash.playlist.SpotifyService;
+import bot.stats.StatsService;
 
 /**
  * Lightweight HTTP server for the playlist web player, built on the JDK's {@code com.sun.net.httpserver}
@@ -24,12 +25,15 @@ public class WebServer {
 
     private final PlaylistService playlistService;
     private final SpotifyService spotifyService;
+    private final StatsService statsService;
     private final Config config;
     private final int port;
 
-    public WebServer(PlaylistService playlistService, SpotifyService spotifyService, Config config) {
+    public WebServer(
+            PlaylistService playlistService, SpotifyService spotifyService, StatsService statsService, Config config) {
         this.playlistService = playlistService;
         this.spotifyService = spotifyService;
+        this.statsService = statsService;
         this.config = config;
         this.port = config.webPortOrDefault();
     }
@@ -45,7 +49,8 @@ public class WebServer {
                 return thread;
             }));
 
-            server.createContext("/api/", new PlaylistApiHandler(playlistService, spotifyService, config));
+            server.createContext(
+                    "/api/", new PlaylistApiHandler(playlistService, spotifyService, statsService, config));
             server.createContext("/", new StaticHandler());
 
             server.start();

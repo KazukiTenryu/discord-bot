@@ -10,6 +10,8 @@ import com.sedmelluq.discord.lavaplayer.player.event.AudioEventAdapter;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackEndReason;
 
+import bot.stats.StatsService;
+
 /**
  * Per-guild track queue. Listens to the {@link AudioPlayer} and, when a track finishes naturally,
  * starts the next queued track.
@@ -44,6 +46,21 @@ public class TrackScheduler extends AudioEventAdapter {
     /** A snapshot of the tracks waiting to be played, in order. */
     public List<AudioTrack> getQueue() {
         return new ArrayList<>(queue);
+    }
+
+    @Override
+    public void onTrackStart(AudioPlayer player, AudioTrack track) {
+        // A track is actually playing now (via /play or /play-playlist) — log it for the server stats.
+        StatsService stats = PlayerManager.getInstance().getStatsService();
+        if (stats == null) {
+            return;
+        }
+        PlayerManager.Requester requester = track.getUserData() instanceof PlayerManager.Requester r ? r : null;
+        stats.recordPlay(
+                requester == null ? null : requester.userId(),
+                requester == null ? null : requester.userName(),
+                track.getInfo(),
+                "voice");
     }
 
     @Override

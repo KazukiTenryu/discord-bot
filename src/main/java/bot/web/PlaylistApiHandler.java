@@ -39,6 +39,7 @@ import bot.slash.playlist.SpotifyService;
 import bot.slash.playlist.SpotifyService.SpotifyPlaylist;
 import bot.slash.playlist.SpotifyService.SpotifyTrack;
 import bot.slash.playlist.SpotifyService.Tokens;
+import bot.stats.StatsService;
 import bot.utils.DiscoverService;
 import bot.utils.LyricsService;
 import tools.jackson.databind.JsonNode;
@@ -109,6 +110,7 @@ public class PlaylistApiHandler implements HttpHandler {
     private final PlaylistService playlistService;
     // Null when Spotify import isn't configured; the /api/spotify/* endpoints then report disabled.
     private final SpotifyService spotifyService;
+    private final StatsService statsService;
     private final Config config;
     // At most one running import per user, keyed by Discord user id.
     private final Map<String, ImportProgress> imports = new ConcurrentHashMap<>();
@@ -128,9 +130,11 @@ public class PlaylistApiHandler implements HttpHandler {
         }
     });
 
-    public PlaylistApiHandler(PlaylistService playlistService, SpotifyService spotifyService, Config config) {
+    public PlaylistApiHandler(
+            PlaylistService playlistService, SpotifyService spotifyService, StatsService statsService, Config config) {
         this.playlistService = playlistService;
         this.spotifyService = spotifyService;
+        this.statsService = statsService;
         this.config = config;
     }
 
@@ -204,6 +208,19 @@ public class PlaylistApiHandler implements HttpHandler {
         if (path.equals("/api/discover")) {
             String country = queryParam(exchange, "country");
             sendJson(exchange, country == null ? discoverService.discover() : discoverService.discover(country));
+            return;
+        }
+        if (path.equals("/api/server")) {
+            sendJson(exchange, statsService.serverStats());
+            return;
+        }
+        if (path.equals("/api/server/me")) {
+            TokenOwner owner = authenticate(exchange);
+            if (owner == null) {
+                sendText(exchange, 401, "Unauthorized");
+                return;
+            }
+            sendJson(exchange, statsService.userTop(owner.userId(), 12));
             return;
         }
         if (path.equals("/api/lyrics")) {

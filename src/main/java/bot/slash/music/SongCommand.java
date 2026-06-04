@@ -17,6 +17,7 @@ import org.apache.logging.log4j.Logger;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 
 import bot.slash.SlashCommand;
+import bot.stats.StatsService;
 
 /**
  * /song — searches for a track by name, decodes it to an {@code .ogg} file, and posts it in the text
@@ -42,10 +43,18 @@ public class SongCommand extends SlashCommand {
         // Decoding takes a few seconds, so acknowledge first and follow up with the file.
         event.deferReply().queue();
 
+        String userId = event.getUser().getId();
+        String userName = event.getMember() != null
+                ? event.getMember().getEffectiveName()
+                : event.getUser().getEffectiveName();
         PlayerManager.getInstance().downloadOgg(query).whenComplete((track, error) -> {
             if (error != null) {
                 event.getHook().sendMessage(errorMessage(error, name)).queue();
                 return;
+            }
+            StatsService stats = PlayerManager.getInstance().getStatsService();
+            if (stats != null) {
+                stats.recordPlay(userId, userName, track.info(), "song");
             }
             event.getHook()
                     .sendFiles(FileUpload.fromData(track.ogg(), fileName(track.info())))

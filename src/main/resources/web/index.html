@@ -392,6 +392,23 @@
   .disc-banner.charts-promo .disc-banner-k { color: hsl(195 90% 62%); }
   .disc-banner.charts-promo:hover .disc-banner-arrow { fill: hsl(195 90% 62%); }
 
+  /* Server stats: headline-number strip + artist chips */
+  .stat-strip { display: flex; gap: 14px; flex-wrap: wrap; }
+  .stat-card {
+    flex: 1 1 140px; min-width: 120px; padding: 18px 20px; border-radius: 16px;
+    border: 1px solid var(--line); background: linear-gradient(160deg, var(--surface), var(--panel-2));
+  }
+  .stat-num { font-family: var(--font-display); font-size: clamp(26px, 4vw, 38px); font-weight: 600; line-height: 1; letter-spacing: -.02em; }
+  .stat-label { color: var(--muted); font-size: 12.5px; margin-top: 6px; text-transform: uppercase; letter-spacing: .12em; }
+  .artist-chip {
+    flex: 0 0 auto; display: inline-flex; align-items: baseline; gap: 8px; cursor: pointer; white-space: nowrap;
+    padding: 9px 16px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,0.04);
+    color: var(--text); font-weight: 600; font-size: 13.5px;
+    transition: background .14s ease, border-color .14s ease, transform .12s var(--ease);
+  }
+  .artist-chip .acount { color: hsl(var(--hue,276) 70% 65%); font-family: "DM Mono", monospace; font-size: 12px; }
+  .artist-chip:hover { background: rgba(255,255,255,0.08); border-color: var(--line-strong); transform: translateY(-1px); }
+
   /* ---------- loading / empty / skeleton ---------- */
   .empty, .loading { color: var(--muted); padding: 56px 4px; font-size: 15px; line-height: 1.55; max-width: 640px; }
   .empty b { color: var(--text); font-weight: 700; }
@@ -661,6 +678,10 @@
     <button class="rail-nav" id="railCharts" type="button">
       <svg viewBox="0 0 24 24"><path d="M3 3h2v18H3V3zm16 8h2v10h-2V11zm-5-6h2v16h-2V5zM9 13h2v8H9v-8z"/></svg>
       Charts
+    </button>
+    <button class="rail-nav" id="railServer" type="button">
+      <svg viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5zm0 7.2L5.7 7 12 4.2 18.3 7 12 9.2zM2 12l10 5 10-5-2.3-1.2L12 14.5 4.3 10.8 2 12zm0 5 10 5 10-5-2.3-1.2L12 19.5 4.3 15.8 2 17z"/></svg>
+      Your server
     </button>
     <div class="rail-label">Listeners</div>
     <div class="rail-people" id="railPeople"></div>
@@ -943,7 +964,7 @@
     railPeople.querySelectorAll(".person").forEach((r) => {
       r.classList.toggle("active", String(r.dataset.uid) === String(currentUserId));
     });
-    ["railDiscover", "railCharts"].forEach((id) => {
+    ["railDiscover", "railCharts", "railServer"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.classList.remove("active");
     });
@@ -1045,15 +1066,24 @@
     history.replaceState(null, "", "?view=discover");
     setHeader("Discover", "What the world is playing");
     view.innerHTML = trackSkeleton();
-    let shelves;
-    try { shelves = await getJSON("/api/discover"); }
-    catch (e) { view.innerHTML = '<div class="empty">Couldn\'t load Discover right now — try again later.</div>'; return; }
+    let shelves, server = null;
+    try {
+      // Fetch the global trending feed and our own server's hot list together.
+      [shelves, server] = await Promise.all([
+        getJSON("/api/discover"),
+        getJSON("/api/server").catch(() => null),
+      ]);
+    } catch (e) { view.innerHTML = '<div class="empty">Couldn\'t load Discover right now — try again later.</div>'; return; }
     if (!shelves.length) { view.innerHTML = '<div class="empty">Nothing trending right now — check back soon.</div>'; return; }
 
     view.innerHTML = "";
     const wrap = document.createElement("div"); wrap.className = "discover";
     const lead = shelves[0];
     if (lead.tracks && lead.tracks.length) wrap.appendChild(buildDiscoverHero(lead.tracks[0], lead.accent));
+    // Your community's own chart, right under the global hero.
+    if (server && server.hot && server.hot.length) {
+      wrap.appendChild(buildHotShelf("Hot in your server", server.hot.slice(0, 15), true, 320));
+    }
     shelves.forEach((shelf, si) => wrap.appendChild(buildShelf(shelf, si)));
     wrap.appendChild(buildChartsPromo());
     view.appendChild(wrap);
@@ -1267,6 +1297,145 @@
     const lead = shelves[0];
     if (lead.tracks && lead.tracks.length) box.appendChild(buildDiscoverHero(lead.tracks[0], lead.accent));
     shelves.forEach((shelf, si) => box.appendChild(buildShelf(shelf, si)));
+  }
+
+  // ---- Server stats ("Hot in this server") ----------------------------------
+  // Server "hot" tracks carry a real URI, so they play directly (no /api/search needed).
+  function toPlayable(t) {
+    return {
+      id: null, uri: t.uri, title: t.title, trackName: t.title,
+      artist: t.artist, author: t.artist, thumbnailUrl: t.artworkUrl, durationMs: 0,
+    };
+  }
+
+  function buildHotCard(t, i, ranked, mapped, queueName) {
+    const card = document.createElement("div");
+    card.className = "disc-card" + (ranked ? " ranked" : "");
+    card.style.setProperty("--i", i);
+    const art =
+      '<div class="disc-art"><img loading="lazy" alt="" />' +
+      '<button class="disc-play" type="button" aria-label="Play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>' +
+      '<button class="disc-add" type="button" aria-label="Add to a playlist">' + ICON_PLUS + "</button>" +
+      '</div><div class="disc-name"></div><div class="disc-artist"></div>';
+    card.innerHTML = ranked ? '<div class="disc-rank">' + (i + 1) + '</div><div class="disc-rank-col">' + art + "</div>" : art;
+    const img = card.querySelector("img");
+    img.src = t.artworkUrl || FALLBACK_ART; img.onerror = () => { img.src = FALLBACK_ART; };
+    card.querySelector(".disc-name").textContent = t.title || "Unknown";
+    card.querySelector(".disc-artist").textContent = t.artist || "";
+    card.addEventListener("click", () => { queue = mapped; playlistName = queueName; playAt(i); });
+    card.querySelector(".disc-add").addEventListener("click", (e) => { e.stopPropagation(); hotAdd(t, e.currentTarget); });
+    return card;
+  }
+
+  function hotAdd(t, btn) {
+    if (!authToken) { toast("Open your /playlist link to add songs."); return; }
+    const result = { uri: t.uri, title: t.title };
+    if (me) { const r = btn.getBoundingClientRect(); openAddPicker(r.left, r.bottom + 6, result); }
+    else addToPlaylist(result, btn);
+  }
+
+  function buildHotShelf(title, tracks, ranked, hue) {
+    const mapped = tracks.map(toPlayable);
+    const sec = document.createElement("section"); sec.className = "shelf"; sec.style.setProperty("--hue", hue);
+    const head = document.createElement("div"); head.className = "shelf-head";
+    const h = document.createElement("h3"); h.className = "shelf-title"; h.textContent = title; head.appendChild(h);
+    sec.appendChild(head);
+    const row = document.createElement("div"); row.className = "shelf-row";
+    tracks.forEach((t, i) => row.appendChild(buildHotCard(t, i, ranked, mapped, title)));
+    enableDragScroll(row);
+    sec.appendChild(row);
+    return sec;
+  }
+
+  function openServer() {
+    navStack.length = 0;
+    navStack.push(() => showUsers());
+    go(() => showServer());
+  }
+
+  async function showServer() {
+    currentUserId = null; markRail(); tintStage(null);
+    document.getElementById("railServer").classList.add("active");
+    history.replaceState(null, "", "?view=server");
+    setHeader("Your server", "What everyone’s playing");
+    view.innerHTML = trackSkeleton();
+    let data;
+    try { data = await getJSON("/api/server"); }
+    catch (e) { view.innerHTML = '<div class="empty">Couldn\'t load server stats right now.</div>'; return; }
+
+    view.innerHTML = "";
+    const wrap = document.createElement("div"); wrap.className = "discover";
+    const lead = document.createElement("div");
+    lead.innerHTML = '<div class="home-lead">Your server</div><div class="home-sub">What everyone’s been playing and saving</div>';
+    wrap.appendChild(lead);
+    wrap.appendChild(buildTotals(data.totals));
+
+    if (data.hot && data.hot.length) wrap.appendChild(buildHotShelf("Hot in this server", data.hot, true, 142));
+    else { const e = document.createElement("div"); e.className = "empty"; e.textContent = "No plays yet — use /play or /song in Discord, or add songs to a playlist."; wrap.appendChild(e); }
+
+    if (data.topArtists && data.topArtists.length) wrap.appendChild(buildArtistStrip(data.topArtists));
+
+    if (me) {
+      try {
+        const mine = await fetch("/api/server/me", { headers: { "X-Playlist-Token": authToken } }).then((r) => (r.ok ? r.json() : []));
+        if (mine.length) wrap.appendChild(buildHotShelf("Your top tracks", mine, false, 276));
+      } catch (e) {}
+    }
+
+    if (data.recent && data.recent.length) wrap.appendChild(buildRecent(data.recent));
+    view.appendChild(wrap);
+  }
+
+  function buildTotals(t) {
+    const strip = document.createElement("div"); strip.className = "stat-strip";
+    [["Plays", t.plays], ["Songs saved", t.savedTracks], ["Listeners", t.listeners]].forEach(([label, val]) => {
+      const c = document.createElement("div"); c.className = "stat-card";
+      c.innerHTML = '<div class="stat-num"></div><div class="stat-label"></div>';
+      c.querySelector(".stat-num").textContent = fmtCount(val);
+      c.querySelector(".stat-label").textContent = label;
+      strip.appendChild(c);
+    });
+    return strip;
+  }
+  function fmtCount(n) { return n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k" : String(n); }
+
+  function buildArtistStrip(artists) {
+    const sec = document.createElement("section"); sec.className = "shelf"; sec.style.setProperty("--hue", 276);
+    const head = document.createElement("div"); head.className = "shelf-head";
+    const h = document.createElement("h3"); h.className = "shelf-title"; h.textContent = "Top artists"; head.appendChild(h);
+    sec.appendChild(head);
+    const row = document.createElement("div"); row.className = "country-row";
+    artists.forEach((a) => {
+      const chip = document.createElement("button"); chip.type = "button"; chip.className = "artist-chip";
+      chip.innerHTML = '<span class="aname"></span><span class="acount"></span>';
+      chip.querySelector(".aname").textContent = a.name;
+      chip.querySelector(".acount").textContent = a.count;
+      chip.addEventListener("click", () => go(() => showSearch(a.name)));
+      row.appendChild(chip);
+    });
+    enableDragScroll(row);
+    sec.appendChild(row);
+    return sec;
+  }
+
+  function buildRecent(list) {
+    const sec = document.createElement("section"); sec.className = "shelf"; sec.style.setProperty("--hue", 38);
+    const head = document.createElement("div"); head.className = "shelf-head";
+    const h = document.createElement("h3"); h.className = "shelf-title"; h.textContent = "Recently played"; head.appendChild(h);
+    sec.appendChild(head);
+    const tracks = document.createElement("div"); tracks.className = "tracks";
+    list.forEach((t, i) => {
+      const pretty = {
+        thumbnailUrl: t.artworkUrl, title: t.title, trackName: t.title, durationMs: 0,
+        author: (t.artist ? t.artist + " · " : "") + "played by " + (t.userName || "someone"),
+      };
+      const row = buildTrackRow(pretty, null);
+      row.style.setProperty("--i", i);
+      row.addEventListener("click", () => { queue = [toPlayable(t)]; playlistName = "Recently played"; playAt(0); });
+      tracks.appendChild(row);
+    });
+    sec.appendChild(tracks);
+    return sec;
   }
 
   // A user's playlists — the screen between the people grid and a single playlist's tracks.
@@ -1829,6 +1998,7 @@
   $("railSearch").addEventListener("click", openSearchModal);
   $("railDiscover").addEventListener("click", openDiscover);
   $("railCharts").addEventListener("click", openCharts);
+  $("railServer").addEventListener("click", openServer);
   $("stageSearch").addEventListener("click", openSearchModal);
   searchModal.addEventListener("click", (e) => { if (e.target === searchModal) closeSearchModal(); });
   qInput.addEventListener("keydown", (e) => {
@@ -2073,6 +2243,11 @@
     }
     if (params.get("view") === "charts") {
       go(() => showCharts(params.get("country")));
+      syncBack();
+      return;
+    }
+    if (params.get("view") === "server") {
+      go(() => showServer());
       syncBack();
       return;
     }

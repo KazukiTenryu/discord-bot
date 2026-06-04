@@ -32,6 +32,7 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrackEndReason;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import com.sedmelluq.discord.lavaplayer.track.playback.AudioFrame;
 
+import bot.stats.StatsService;
 import dev.lavalink.youtube.YoutubeAudioSourceManager;
 import dev.lavalink.youtube.clients.AndroidVrWithThumbnail;
 import dev.lavalink.youtube.clients.MusicWithThumbnail;
@@ -56,8 +57,13 @@ public class PlayerManager {
 
     private static PlayerManager instance;
 
+    /** Who asked for a track, attached as its {@code userData} so the scheduler can log the play. */
+    public record Requester(String userId, String userName) {}
+
     private final AudioPlayerManager audioPlayerManager;
     private final Map<Long, GuildMusicManager> musicManagers;
+    // Set via init(); used by the scheduler to log plays. May be null (stats disabled / not wired).
+    private StatsService statsService;
     // Off-thread decoders for /song; daemon so they never hold up shutdown.
     private final ExecutorService downloadExecutor = Executors.newCachedThreadPool(runnable -> {
         Thread thread = new Thread(runnable, "song-download");
@@ -119,10 +125,11 @@ public class PlayerManager {
     }
 
     /** Initialises the singleton with YouTube OAuth configured from {@code refreshToken}. */
-    public static synchronized void init(String youtubeOauthRefreshToken) {
+    public static synchronized void init(String youtubeOauthRefreshToken, StatsService statsService) {
         if (instance == null) {
             instance = new PlayerManager(youtubeOauthRefreshToken);
         }
+        instance.statsService = statsService;
     }
 
     public static synchronized PlayerManager getInstance() {
@@ -132,21 +139,34 @@ public class PlayerManager {
         return instance;
     }
 
+    /** The play-logging service, or {@code null} when stats aren't wired up. */
+    public StatsService getStatsService() {
+        return statsService;
+    }
+
     public GuildMusicManager getMusicManager(Guild guild) {
         return musicManagers.computeIfAbsent(guild.getIdLong(), _ -> new GuildMusicManager(audioPlayerManager));
+    }
+
+    /** Tags the track with its requester (for play-logging) and hands it to the guild's scheduler. */
+    private static void queue(GuildMusicManager musicManager, AudioTrack track, Requester requester) {
+        if (requester != null) {
+            track.setUserData(requester);
+        }
+        musicManager.getScheduler().queue(track);
     }
 
     /**
      * Resolves {@code query} (a URL or a {@code ytsearch:} term) and queues the result, replying to
      * the user through {@code hook}. The voice connection must already be open.
      */
-    public void loadAndPlay(Guild guild, String query, InteractionHook hook) {
+    public void loadAndPlay(Guild guild, String query, InteractionHook hook, Requester requester) {
         GuildMusicManager musicManager = getMusicManager(guild);
 
         audioPlayerManager.loadItemOrdered(musicManager, query, new AudioLoadResultHandler() {
             @Override
             public void trackLoaded(AudioTrack track) {
-                musicManager.getScheduler().queue(track);
+                queue(musicManager, track, requester);
                 hook.sendMessage("🎵 Queued **" + track.getInfo().title + "**").queue();
             }
 
@@ -155,14 +175,14 @@ public class PlayerManager {
                 // A search (ytsearch:) returns a playlist of results; queue only the top hit.
                 if (playlist.isSearchResult()) {
                     AudioTrack track = playlist.getTracks().getFirst();
-                    musicManager.getScheduler().queue(track);
+                    queue(musicManager, track, requester);
                     hook.sendMessage("🎵 Queued **" + track.getInfo().title + "**")
                             .queue();
                     return;
                 }
 
                 for (AudioTrack track : playlist.getTracks()) {
-                    musicManager.getScheduler().queue(track);
+                    queue(musicManager, track, requester);
                 }
                 hook.sendMessage("🎵 Queued **" + playlist.getTracks().size() + "** tracks from **" + playlist.getName()
                                 + "**")
@@ -268,14 +288,14 @@ public class PlayerManager {
      * in bulk; the returned future completes with the queued track (the first, for a playlist) or
      * fails if nothing loads, so the caller can keep its own count of what made it in.
      */
-    public CompletableFuture<AudioTrack> enqueue(Guild guild, String identifier) {
+    public CompletableFuture<AudioTrack> enqueue(Guild guild, String identifier, Requester requester) {
         GuildMusicManager musicManager = getMusicManager(guild);
         CompletableFuture<AudioTrack> future = new CompletableFuture<>();
 
         audioPlayerManager.loadItemOrdered(musicManager, identifier, new AudioLoadResultHandler() {
             @Override
             public void trackLoaded(AudioTrack track) {
-                musicManager.getScheduler().queue(track);
+                queue(musicManager, track, requester);
                 future.complete(track);
             }
 
@@ -288,12 +308,12 @@ public class PlayerManager {
                 AudioTrack first =
                         playlist.isSearchResult() ? playlist.getTracks().getFirst() : null;
                 if (first != null) {
-                    musicManager.getScheduler().queue(first);
+                    queue(musicManager, first, requester);
                     future.complete(first);
                     return;
                 }
                 for (AudioTrack track : playlist.getTracks()) {
-                    musicManager.getScheduler().queue(track);
+                    queue(musicManager, track, requester);
                 }
                 future.complete(playlist.getTracks().getFirst());
             }

@@ -130,11 +130,18 @@ public class PlayPlaylistCommand extends MusicCommand {
 
         // loadItemOrdered (inside enqueue) preserves submission order per guild, so firing these in
         // sequence keeps the playlist's order even though each load is async.
+        String requesterName = event.getMember() != null
+                ? event.getMember().getEffectiveName()
+                : event.getUser().getEffectiveName();
+        PlayerManager.Requester requester =
+                new PlayerManager.Requester(event.getUser().getId(), requesterName);
         for (StoredTrack track : tracks) {
-            PlayerManager.getInstance().enqueue(event.getGuild(), track.uri()).exceptionally(error -> {
-                LOGGER.warn("Couldn't queue '{}' ({})", track.title(), track.uri(), error);
-                return null;
-            });
+            PlayerManager.getInstance()
+                    .enqueue(event.getGuild(), track.uri(), requester)
+                    .exceptionally(error -> {
+                        LOGGER.warn("Couldn't queue '{}' ({})", track.title(), track.uri(), error);
+                        return null;
+                    });
         }
 
         StringBuilder description = new StringBuilder();

@@ -41,7 +41,15 @@ public class PlayCommand extends MusicCommand {
         // A bare term becomes a YouTube search; URLs are resolved by their matching source manager.
         String identifier = isUrl(query) ? query : "ytsearch:" + query;
 
-        PlayerManager.getInstance().loadAndPlay(event.getGuild(), identifier, event.getHook());
+        String name = event.getMember() != null
+                ? event.getMember().getEffectiveName()
+                : event.getUser().getEffectiveName();
+        PlayerManager.getInstance()
+                .loadAndPlay(
+                        event.getGuild(),
+                        identifier,
+                        event.getHook(),
+                        new PlayerManager.Requester(event.getUser().getId(), name));
     }
 
     private boolean isUrl(String query) {
