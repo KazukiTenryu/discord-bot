@@ -9,6 +9,7 @@ import net.dv8tion.jda.api.events.session.ReadyEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.requests.restaction.CommandListUpdateAction;
+import net.dv8tion.jda.api.utils.MemberCachePolicy;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
 
 import org.apache.logging.log4j.LogManager;
@@ -21,6 +22,8 @@ import bot.config.Config;
 import bot.config.ConfigLoader;
 import bot.database.Database;
 import bot.listeners.MessageReceivedListener;
+import bot.maya.MayaSessionManager;
+import bot.maya.MayaVoiceListener;
 import bot.metrics.MetricService;
 import bot.slash.SlashCommandRepository;
 import bot.slash.music.PlayerManager;
@@ -65,13 +68,25 @@ public class Main {
             Thread metadataBackfill = new Thread(playlistService::backfillMetadata, "metadata-backfill");
             metadataBackfill.setDaemon(true);
             metadataBackfill.start();
-            SlashCommandRepository slashCommandRepository =
-                    new SlashCommandRepository(config, database, playlistService);
+            // Maya voice conversation (ElevenLabs Agents) is optional; only wired up when the API
+            // key and agent id are configured.
+            MayaSessionManager mayaSessions = null;
+            if (config.mayaConfigured()) {
+                mayaSessions = new MayaSessionManager(
+                        config.elevenLabsApiKey(), config.elevenLabsAgentId(), config.mayaCharacterOrDefault());
+            }
 
-            JDA jda = JDABuilder.createLight(config.botToken(), EnumSet.allOf(GatewayIntent.class))
+            SlashCommandRepository slashCommandRepository =
+                    new SlashCommandRepository(config, database, playlistService, mayaSessions);
+
+            JDABuilder jdaBuilder = JDABuilder.createLight(config.botToken(), EnumSet.allOf(GatewayIntent.class))
                     // VOICE_STATE caching lets the music commands see which channel a member is in;
                     // createLight() disables all cache flags by default.
                     .enableCache(CacheFlag.VOICE_STATE)
+                    // Cache members who are in voice channels. Without this, createLight() caches no
+                    // members, so JDA can't resolve the speaker for incoming audio packets and drops
+                    // them ("userId ... is unknown to JDA") — voice RECEIVE (e.g. /maya) hears nothing.
+                    .setMemberCachePolicy(MemberCachePolicy.VOICE)
                     // Discord requires the DAVE protocol for voice; plug in the native libdave
                     // implementation so audio connections aren't rejected. JDA's built-in factory is
                     // only a non-functional passthrough.
@@ -89,8 +104,15 @@ public class Main {
                                     "Bot is ready! Logged in as {}",
                                     event.getJDA().getSelfUser().getName());
                         }
-                    })
-                    .build();
+                    });
+
+            // Follow humans into voice and start Maya automatically, only when both Sesame is
+            // configured and auto-join is enabled.
+            if (mayaSessions != null && config.mayaAutoJoinEnabled()) {
+                jdaBuilder.addEventListeners(new MayaVoiceListener(mayaSessions));
+            }
+
+            JDA jda = jdaBuilder.build();
 
             CommandListUpdateAction commands = jda.updateCommands();
             slashCommandRepository.getCommands().forEach(slashCommand -> commands.addCommands(slashCommand.getData()));

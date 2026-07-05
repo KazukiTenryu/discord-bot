@@ -36,7 +36,16 @@ public record Config(
         // (typically webBaseUrl + "/api/spotify/callback").
         @JsonProperty("spotifyClientId") String spotifyClientId,
         @JsonProperty("spotifyClientSecret") String spotifyClientSecret,
-        @JsonProperty("spotifyRedirectUri") String spotifyRedirectUri) {
+        @JsonProperty("spotifyRedirectUri") String spotifyRedirectUri,
+        // ElevenLabs Agents voice conversation ("Maya"). eleven_labs_agent_id points at an agent
+        // created in the ElevenLabs dashboard/API (it defines the voice + persona). When either the
+        // key or agent id is blank the /maya command is not registered. maya_character is just the
+        // display name (defaults to "Maya"); maya_auto_join (off by default) makes the bot follow
+        // humans into voice channels automatically — note conversations are billed per minute.
+        @JsonProperty("eleven_labs_api_key") String elevenLabsApiKey,
+        @JsonProperty("eleven_labs_agent_id") String elevenLabsAgentId,
+        @JsonProperty("maya_character") String mayaCharacter,
+        @JsonProperty("maya_auto_join") Boolean mayaAutoJoin) {
 
     private static final int DEFAULT_WEB_PORT = 8080;
 
@@ -57,6 +66,21 @@ public record Config(
     /** Whether Spotify import is configured (client id, secret and redirect URI all present). */
     public boolean spotifyConfigured() {
         return notBlank(spotifyClientId) && notBlank(spotifyClientSecret) && notBlank(spotifyRedirectUri);
+    }
+
+    /** Whether the ElevenLabs voice conversation is configured (API key and agent id present). */
+    public boolean mayaConfigured() {
+        return notBlank(elevenLabsApiKey) && notBlank(elevenLabsAgentId);
+    }
+
+    /** The configured voice-assistant display name, or "Maya" when unset. */
+    public String mayaCharacterOrDefault() {
+        return notBlank(mayaCharacter) ? mayaCharacter.strip() : "Maya";
+    }
+
+    /** Whether the bot should auto-join voice channels for Maya (defaults to false). */
+    public boolean mayaAutoJoinEnabled() {
+        return Boolean.TRUE.equals(mayaAutoJoin);
     }
 
     private static boolean notBlank(String s) {

@@ -5,8 +5,10 @@ import java.util.List;
 
 import bot.config.Config;
 import bot.database.Database;
+import bot.maya.MayaSessionManager;
 import bot.slash.gif.GifCommand;
 import bot.slash.kissorslap.KissOrSlapCommand;
+import bot.slash.maya.MayaCommand;
 import bot.slash.moderation.*;
 import bot.slash.music.LyricsCommand;
 import bot.slash.music.NowPlayingCommand;
@@ -33,12 +35,14 @@ import bot.slash.wouldyourather.WouldYouRatherCommand;
 public class SlashCommandRepository {
     private final List<SlashCommand> commands;
 
-    public SlashCommandRepository(Config config, Database database, PlaylistService playlistService) {
+    public SlashCommandRepository(
+            Config config, Database database, PlaylistService playlistService, MayaSessionManager mayaSessions) {
         this.commands = new ArrayList<>();
-        registerCommands(config, database, playlistService);
+        registerCommands(config, database, playlistService, mayaSessions);
     }
 
-    private void registerCommands(Config config, Database database, PlaylistService playlistService) {
+    private void registerCommands(
+            Config config, Database database, PlaylistService playlistService, MayaSessionManager mayaSessions) {
         commands.add(new PingCommand());
 
         commands.add(new RateCommand());
@@ -74,6 +78,11 @@ public class SlashCommandRepository {
         commands.add(new PlayPlaylistCommand(playlistService));
 
         commands.addAll(ActionCommand.registerActionCommands(new HandleCommandAction(config)));
+
+        // Only expose /maya when Sesame credentials are configured.
+        if (mayaSessions != null) {
+            commands.add(new MayaCommand(mayaSessions));
+        }
     }
 
     public List<SlashCommand> getCommands() {
