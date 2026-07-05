@@ -1,10 +1,13 @@
 package bot.maya;
 
-import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
+import java.util.ArrayDeque;
+import java.util.Deque;
 
 import net.dv8tion.jda.api.audio.AudioSendHandler;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  * Streams the AI's speech into the Discord voice channel.
@@ -14,54 +17,86 @@ import net.dv8tion.jda.api.audio.AudioSendHandler;
  * at a time via {@link #provide20MsAudio()}; {@link #isOpus()} returns {@code false} so JDA encodes
  * the PCM to Opus itself. When Maya is silent the buffer drains and {@link #canProvide()} returns
  * {@code false}, so nothing is sent.
+ *
+ * <p>The backend streams a whole reply faster than real time, so it lands here in a burst and drains
+ * at 20 ms/frame. The buffer is a queue of chunks drained from the front (O(frame) per pull, not a
+ * full-buffer copy), with a generous ceiling so long replies aren't truncated. Barge-in clears it.
  */
 public class MayaAudioSendHandler implements AudioSendHandler {
+    private static final Logger LOGGER = LogManager.getLogger(MayaAudioSendHandler.class);
     // 20 ms of 48 kHz, 16-bit, stereo PCM = 48000 * 0.02 * 2 channels * 2 bytes.
     private static final int FRAME_BYTES = 3840;
-    // Cap the backlog so a burst from the server can't grow memory without bound (~5 s of audio).
-    private static final int MAX_BUFFERED_BYTES = FRAME_BYTES * 250;
+    // Ceiling on buffered audio (~120 s). Only a runaway reply should ever reach this; a single
+    // spoken response is far shorter, and interruptions clear the buffer, so this stays generous.
+    private static final int MAX_BUFFERED_BYTES = FRAME_BYTES * 50 * 120;
 
-    private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-    private final byte[] frame = new byte[FRAME_BYTES];
+    private final Object lock = new Object();
+    private final Deque<byte[]> chunks = new ArrayDeque<>();
+    private int headOffset; // bytes already consumed from the head chunk
+    private int available; // total unread bytes across all chunks
+    private boolean overflowLogged;
 
     /** Converts one chunk of Maya's PCM to Discord format and queues it for playback. */
-    public void offer(byte[] sesamePcm, int sourceRate) {
-        byte[] discordPcm = AudioResampler.sesameToDiscord(sesamePcm, sourceRate);
-        synchronized (buffer) {
-            if (buffer.size() + discordPcm.length > MAX_BUFFERED_BYTES) {
-                return; // drop rather than lag further and further behind real time
+    public void offer(byte[] backendPcm, int sourceRate) {
+        byte[] discordPcm = AudioResampler.sesameToDiscord(backendPcm, sourceRate);
+        if (discordPcm.length == 0) {
+            return;
+        }
+        synchronized (lock) {
+            if (available + discordPcm.length > MAX_BUFFERED_BYTES) {
+                if (!overflowLogged) {
+                    LOGGER.warn("Playback buffer full (~{}s); dropping audio to avoid unbounded lag", 120);
+                    overflowLogged = true;
+                }
+                return;
             }
-            buffer.write(discordPcm, 0, discordPcm.length);
+            chunks.addLast(discordPcm);
+            available += discordPcm.length;
         }
     }
 
-    /** Discards any buffered audio (used when a call ends). */
+    /** Discards any buffered audio (used on interruption and when a call ends). */
     public void clear() {
-        synchronized (buffer) {
-            buffer.reset();
+        synchronized (lock) {
+            chunks.clear();
+            headOffset = 0;
+            available = 0;
+            overflowLogged = false;
         }
     }
 
     @Override
     public boolean canProvide() {
-        synchronized (buffer) {
-            return buffer.size() >= FRAME_BYTES;
+        synchronized (lock) {
+            return available >= FRAME_BYTES;
         }
     }
 
     @Override
     public ByteBuffer provide20MsAudio() {
-        synchronized (buffer) {
-            byte[] all = buffer.toByteArray();
-            if (all.length < FRAME_BYTES) {
+        byte[] out = new byte[FRAME_BYTES];
+        synchronized (lock) {
+            if (available < FRAME_BYTES) {
                 return null;
             }
-            System.arraycopy(all, 0, frame, 0, FRAME_BYTES);
-            // Rewrite the buffer without the frame we just consumed.
-            buffer.reset();
-            buffer.write(all, FRAME_BYTES, all.length - FRAME_BYTES);
+            int written = 0;
+            while (written < FRAME_BYTES) {
+                byte[] head = chunks.peekFirst();
+                int take = Math.min(head.length - headOffset, FRAME_BYTES - written);
+                System.arraycopy(head, headOffset, out, written, take);
+                written += take;
+                headOffset += take;
+                if (headOffset >= head.length) {
+                    chunks.pollFirst();
+                    headOffset = 0;
+                }
+            }
+            available -= FRAME_BYTES;
+            if (available < MAX_BUFFERED_BYTES / 2) {
+                overflowLogged = false; // room again; allow a future overflow to log once more
+            }
         }
-        return ByteBuffer.wrap(Arrays.copyOf(frame, FRAME_BYTES));
+        return ByteBuffer.wrap(out);
     }
 
     @Override
